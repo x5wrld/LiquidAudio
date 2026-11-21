@@ -1,0 +1,519 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.liquid-bg-dark {
+  background: radial-gradient(circle at 20% 15%, rgba(168, 85, 247, 0.14) 0%, transparent 48%),
+              radial-gradient(circle at 80% 85%, rgba(99, 102, 241, 0.12) 0%, transparent 52%),
+              linear-gradient(145deg, #0e0f14 0%, #171922 100%);
+}
+
+.liquid-bg-light {
+  background: radial-gradient(circle at 20% 15%, rgba(124, 58, 237, 0.12) 0%, transparent 48%),
+              radial-gradient(circle at 80% 85%, rgba(99, 102, 241, 0.10) 0%, transparent 52%),
+              linear-gradient(145deg, #D5D9E0 0%, #EAECEF 100%);
+}
+
+.glass-surface-dark {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.04) 100%);
+  backdrop-filter: blur(28px) saturate(185%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  isolation: isolate;
+}
+
+.glass-surface-light {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.42) 100%);
+  backdrop-filter: blur(28px) saturate(185%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  isolation: isolate;
+}
+
+.spotify-surface-dark {
+  background: linear-gradient(180deg, rgba(24, 24, 24, 0.92) 0%, rgba(18, 18, 18, 0.96) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  isolation: isolate;
+}
+
+.spotify-surface-light {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(246, 247, 249, 0.96) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+  isolation: isolate;
+}
+
+.ambient-liquid-layer {
+  contain: paint;
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.ambient-blur-surface,
+.ambient-bubble {
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.recessed-artwork {
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.45), 0 22px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* Gentle 3D floating levitation for desktop album art */
+@keyframes floatArtworkIdle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.artwork-levitate {
+  animation: floatArtworkIdle 5.8s ease-in-out infinite;
+}
+
+.artwork-3d-stage {
+  perspective: 950px;
+  transform-style: preserve-3d;
+}
+
+.artwork-3d-card {
+  transform-style: preserve-3d;
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+  will-change: transform;
+}
+
+/* Liquid Splash Effect for Background & Album Cover Art on Song Change / Skip / Transition (PC & Mobile) */
+@keyframes bgLiquidSplashBloom {
+  0% {
+    opacity: 0.1;
+    transform: scale(0.95) rotate(-2deg);
+    filter: blur(42px) saturate(1.6) brightness(1.35);
+  }
+  42% {
+    opacity: 0.42;
+    transform: scale(1.36) rotate(1.2deg);
+    filter: blur(50px) saturate(1.45) brightness(1.18);
+  }
+  100% {
+    opacity: var(--bg-ambient-opacity, 0.26);
+    transform: scale(1.25) rotate(0deg);
+    filter: blur(48px) saturate(1.1) brightness(1);
+  }
+}
+
+@keyframes bgLiquidSplashRing1 {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.16) rotate(0deg);
+    border-radius: 42% 58% 63% 37% / 45% 39% 61% 55%;
+  }
+  45% {
+    opacity: 0.55;
+    border-radius: 59% 41% 39% 61% / 54% 62% 38% 46%;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.85) rotate(38deg);
+    border-radius: 50%;
+  }
+}
+
+@keyframes bgLiquidSplashRing2 {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.12) rotate(0deg);
+    border-radius: 57% 43% 41% 59% / 53% 58% 42% 47%;
+  }
+  15% {
+    opacity: 0.78;
+  }
+  55% {
+    opacity: 0.42;
+    border-radius: 44% 56% 60% 40% / 47% 42% 58% 53%;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.25) rotate(-32deg);
+    border-radius: 50%;
+  }
+}
+
+@keyframes bgLiquidSplashDroplet {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+  20% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--drop-tx, 160px)), calc(-50% + var(--drop-ty, -140px))) scale(1.35);
+  }
+}
+
+@keyframes coverLiquidSplashMorph {
+  0% {
+    opacity: 0.25;
+    transform: scale3d(0.76, 1.18, 1) translateY(-10px);
+    border-radius: 40% 60% 56% 44% / 46% 38% 62% 54%;
+    filter: blur(8px) brightness(1.35) saturate(1.35);
+  }
+  34% {
+    opacity: 1;
+    transform: scale3d(1.08, 0.92, 1) translateY(3px);
+    border-radius: 30% 34% 28% 32% / 32% 28% 34% 30%;
+    filter: blur(0px) brightness(1.12) saturate(1.15);
+  }
+  64% {
+    transform: scale3d(0.975, 1.028, 1) translateY(-1px);
+    border-radius: 26px;
+    filter: blur(0px) brightness(1.03) saturate(1.04);
+  }
+  84% {
+    transform: scale3d(1.01, 0.992, 1) translateY(0px);
+    border-radius: 24px;
+  }
+  100% {
+    opacity: 1;
+    transform: scale3d(1, 1, 1) translateY(0px);
+    border-radius: 24px;
+    filter: blur(0px) brightness(1) saturate(1);
+  }
+}
+
+@keyframes coverLiquidRippleWave {
+  0% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(0.14) rotate(0deg);
+    border-radius: 42% 58% 61% 39% / 47% 41% 59% 53%;
+  }
+  50% {
+    opacity: 0.55;
+    border-radius: 56% 44% 43% 57% / 53% 59% 41% 47%;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.35) rotate(28deg);
+    border-radius: 50%;
+  }
+}
+
+@keyframes coverLiquidCausticSweep {
+  0% {
+    opacity: 0.9;
+    transform: translateY(-75%) scaleY(0.65) rotate(-8deg);
+  }
+  45% {
+    opacity: 0.65;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(85%) scaleY(1.35) rotate(6deg);
+  }
+}
+
+.bg-liquid-splash-bloom {
+  animation: bgLiquidSplashBloom 1.05s cubic-bezier(0.19, 1, 0.22, 1) both;
+  will-change: transform, opacity;
+}
+
+.bg-liquid-splash-ring-1 {
+  animation: bgLiquidSplashRing1 1.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity, border-radius;
+}
+
+.bg-liquid-splash-ring-2 {
+  animation: bgLiquidSplashRing2 1.35s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+  will-change: transform, opacity, border-radius;
+}
+
+.bg-liquid-splash-droplet {
+  animation: bgLiquidSplashDroplet 1.05s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.cover-liquid-splash-impact {
+  animation: coverLiquidSplashMorph 0.82s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, border-radius, filter, opacity;
+}
+
+.cover-liquid-ripple-ring-1 {
+  animation: coverLiquidRippleWave 0.88s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity, border-radius;
+}
+
+.cover-liquid-ripple-ring-2 {
+  animation: coverLiquidRippleWave 1.06s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  will-change: transform, opacity, border-radius;
+}
+
+.cover-liquid-caustic-sheen {
+  animation: coverLiquidCausticSweep 0.86s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Slow ambient liquid bubbles */
+@keyframes floatBubble1 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(42px, -36px, 0) scale(1.06);
+  }
+  66% {
+    transform: translate3d(-28px, 26px, 0) scale(0.95);
+  }
+}
+
+@keyframes floatBubble2 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(-48px, 32px, 0) scale(1.08);
+  }
+  66% {
+    transform: translate3d(34px, -28px, 0) scale(0.94);
+  }
+}
+
+@keyframes floatBubble3 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(30px, 40px, 0) scale(1.05);
+  }
+}
+
+.liquid-bubble-1 {
+  animation: floatBubble1 26s ease-in-out infinite;
+}
+
+.liquid-bubble-2 {
+  animation: floatBubble2 32s ease-in-out infinite;
+}
+
+.liquid-bubble-3 {
+  animation: floatBubble3 29s ease-in-out infinite;
+}
+
+.bubble-paused {
+  animation-play-state: paused;
+}
+
+.bubble-playing {
+  animation-play-state: running;
+}
+
+/* Sleek glass range slider */
+input[type="range"].glass-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"].glass-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+}
+
+input[type="range"].glass-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  margin-top: -4px;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8), 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease;
+}
+
+input[type="range"].glass-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Prevent any browser focus bar, white strip, or scrollbar inside the Pop-Out Mini Player */
+.mini-player-root,
+.mini-player-root * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.mini-player-root::-webkit-scrollbar,
+.mini-player-root *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* iPhone 15 Pro / Pro Max Dynamic Island & Home Indicator Safe-Area Shell */
+.app-safe-shell {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  box-sizing: border-box !important;
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+  padding-left: max(0.5rem, env(safe-area-inset-left));
+  padding-right: max(0.5rem, env(safe-area-inset-right));
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .app-safe-shell {
+    padding: 1.25rem;
+  }
+}
+
+/* Dedicated hardware-accelerated dock to eliminate WebKit square box & layer raster clipping bugs on iOS */
+.liquid-dock-nav {
+  position: relative;
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+  -webkit-clip-path: inset(0 round 9999px) !important;
+  clip-path: inset(0 round 9999px) !important;
+  isolation: isolate;
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  contain: paint;
+}
+
+.liquid-dock-item {
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+  -webkit-clip-path: inset(0 round 9999px) !important;
+  clip-path: inset(0 round 9999px) !important;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask-image: radial-gradient(white, black);
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  isolation: isolate;
+  transition-property: background-color, color, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+/* Sub-nav tab capsule styles to eliminate square rasterization glitch when changing tabs on iOS */
+.liquid-tab-capsule {
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+  -webkit-clip-path: inset(0 round 9999px) !important;
+  clip-path: inset(0 round 9999px) !important;
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  isolation: isolate;
+  contain: paint;
+}
+
+.liquid-tab-button {
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+  -webkit-clip-path: inset(0 round 9999px) !important;
+  clip-path: inset(0 round 9999px) !important;
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transition-property: background-color, color, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Liquid Water Movement Through Words & Letters Synced With Artist Vocals */
+@keyframes liquidWaterShimmer {
+  0% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+  100% {
+    background-position: 0% 40%;
+  }
+}
+
+.liquid-water-text {
+  display: inline-block;
+  background-image: linear-gradient(
+    115deg,
+    var(--lyric-c1, #38bdf8) 0%,
+    var(--lyric-c2, #818cf8) 22%,
+    rgba(255, 255, 255, 0.96) 45%,
+    var(--lyric-c3, #c084fc) 70%,
+    var(--lyric-c1, #38bdf8) 100%
+  );
+  background-size: 260% 260%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: liquidWaterShimmer 3.6s ease-in-out infinite;
+  filter: drop-shadow(0 1px 4px var(--lyric-shadow, rgba(0, 0, 0, 0.72))) drop-shadow(0 0 10px var(--lyric-glow, rgba(103, 232, 249, 0.45)));
+  will-change: background-position;
+}
+
