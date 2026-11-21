@@ -1,0 +1,32 @@
+# Dependencies & Build Output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Python / Backend Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Runtime Caches & Local Databases (NEVER commit user data)
+lyrics-cache/
+wrapped-db/
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# Private Developer Docs (kept local, excluded from public GitHub repo)
+DEV_ARCHITECTURE_GUIDE.md
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

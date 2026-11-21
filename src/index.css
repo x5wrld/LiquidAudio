@@ -16,10 +16,8 @@
               linear-gradient(145deg, #0e0f14 0%, #171922 100%);
 }
 
-.liquid-bg-light {
-  background: radial-gradient(circle at 20% 15%, rgba(124, 58, 237, 0.12) 0%, transparent 48%),
-              radial-gradient(circle at 80% 85%, rgba(99, 102, 241, 0.10) 0%, transparent 52%),
-              linear-gradient(145deg, #D5D9E0 0%, #EAECEF 100%);
+.space-bg-dark {
+  background: radial-gradient(ellipse at 50% 0%, #090d1a 0%, #05060c 58%, #020307 100%);
 }
 
 .glass-surface-dark {
@@ -31,30 +29,12 @@
   isolation: isolate;
 }
 
-.glass-surface-light {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.42) 100%);
-  backdrop-filter: blur(28px) saturate(185%);
-  -webkit-backdrop-filter: blur(28px) saturate(185%);
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  isolation: isolate;
-}
-
-.spotify-surface-dark {
-  background: linear-gradient(180deg, rgba(24, 24, 24, 0.92) 0%, rgba(18, 18, 18, 0.96) 100%);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
-  isolation: isolate;
-}
-
-.spotify-surface-light {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(246, 247, 249, 0.96) 100%);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+.space-surface-dark {
+  background: linear-gradient(160deg, rgba(12, 15, 28, 0.72) 0%, rgba(7, 9, 18, 0.82) 100%);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.09);
   isolation: isolate;
 }
 

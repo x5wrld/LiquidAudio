@@ -1,4 +1,4 @@
-const CACHE_NAME = 'liquid-audio-offline-v22';
+const CACHE_NAME = 'liquid-audio-offline-v23';
 const PRECACHE_URLS = ['/', '/index.html', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

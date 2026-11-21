@@ -66,7 +66,15 @@ import {
   Copy,
   Gauge,
   GripVertical,
+  Home,
+  Library,
+  Settings,
+  MoreHorizontal,
+  Bookmark,
+  BookmarkCheck,
+  User,
 } from 'lucide-react';
+import { SpaceMeteorBackground } from './SpaceMeteorBackground';
 import {
   usePlayerStore,
   EQ_LABELS,
@@ -841,11 +849,15 @@ export const App: React.FC = () => {
     starredSongs,
     playlists,
     playlistFolders,
+    savedArtists,
     selectedPlaylist,
     createPlaylistFolder,
     renamePlaylistFolder,
     deletePlaylistFolder,
     assignPlaylistToFolder,
+    toggleSaveArtist,
+    copyPublicPlaylistToMine,
+    removeMultipleSongsFromPlaylist,
     queue,
     currentIndex,
     currentSong,
@@ -914,6 +926,14 @@ export const App: React.FC = () => {
   const [expandedFolderIds, setExpandedFolderIds] = useState<Record<string, boolean>>({});
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
+  const [selectedArtistName, setSelectedArtistName] = useState<string | null>(null);
+  const [librarySection, setLibrarySection] = useState<'overview' | 'offline' | 'liked' | 'playlists' | 'artists'>('overview');
+  const [openRowMenuId, setOpenRowMenuId] = useState<string | null>(null);
+  const [selectedPlaylistTrackIndices, setSelectedPlaylistTrackIndices] = useState<number[]>([]);
+  const [randomSeed, setRandomSeed] = useState<number>(() => Date.now());
+  const [discoverOffset, setDiscoverOffset] = useState<number>(0);
+  const [discoverHasMore, setDiscoverHasMore] = useState<boolean>(false);
+  const [discoverLoadingMore, setDiscoverLoadingMore] = useState<boolean>(false);
   const [userInput, setUserInput] = useState(username || '');
   const [passInput, setPassInput] = useState('');
   const [shareServerInput, setShareServerInput] = useState(shareServerUrl || '');
@@ -1156,7 +1176,7 @@ export const App: React.FC = () => {
         const data = await res.json();
         if (res.ok && data.status === 'ok' && data.song) {
           playSong(data.song);
-          setActiveView('nowPlaying');
+          setActiveView('home');
           notify(`Playing shared track "${data.song.title}" (${data.song.artist})!`);
         } else {
           notify(data.message || 'This shared track link has expired or is invalid.');
@@ -2381,78 +2401,143 @@ export const App: React.FC = () => {
     };
   }, [listeningStats, compareStats]);
 
-  const isDark = theme === 'dark';
-  const isSpotifyUi = uiStyle === 'spotify';
-  const glassClass = isSpotifyUi
-    ? isDark
-      ? 'spotify-surface-dark text-white'
-      : 'spotify-surface-light text-slate-900'
-    : isDark
-    ? 'glass-surface-dark text-white'
-    : 'glass-surface-light text-slate-900';
-  const bgClass = isDark ? 'liquid-bg-dark text-white' : 'liquid-bg-light text-slate-900';
+  const isDark = true;
+  const isSpaceUi = uiStyle === 'space';
+  const glassClass = isSpaceUi
+    ? 'space-surface-dark text-white'
+    : 'glass-surface-dark text-white';
+  const bgClass = isSpaceUi ? 'space-bg-dark text-white' : 'liquid-bg-dark text-white';
   const bubblePlayState = isPlaying ? 'bubble-playing' : 'bubble-paused';
 
   const isCoverDark = palette.brightnessMode === 'dark';
   const isCoverBright = palette.brightnessMode === 'bright';
 
   const dynamicBgStyle: React.CSSProperties = useMemo(() => {
-    if (isSpotifyUi) {
-      if (isDark) {
-        if (isCoverDark) {
-          return {
-            background: `linear-gradient(180deg, rgba(${palette.primaryRgb}, 0.24) 0%, rgba(${palette.secondaryRgb}, 0.12) 32%, #06070a 68%, #030406 100%)`,
-          };
-        }
-        if (isCoverBright) {
-          return {
-            background: `linear-gradient(180deg, rgba(${palette.primaryRgb}, 0.34) 0%, rgba(${palette.secondaryRgb}, 0.16) 36%, #14171f 74%, #0b0d12 100%)`,
-          };
-        }
-        return {
-          background: `linear-gradient(180deg, rgba(${palette.primaryRgb}, 0.50) 0%, rgba(${palette.secondaryRgb}, 0.22) 36%, #121212 72%, #090909 100%)`,
-        };
-      }
+    if (isSpaceUi) {
       return {
-        background: `linear-gradient(180deg, rgba(${palette.primaryRgb}, ${
-          isCoverBright ? 0.24 : 0.36
-        }) 0%, rgba(${palette.secondaryRgb}, 0.16) 38%, #d4dbe6 76%, #c8d0dc 100%)`,
+        background: `radial-gradient(ellipse at 50% 0%, #090d1b 0%, #05070e 58%, #020307 100%)`,
       };
     }
 
-    if (isDark) {
-      // Black / Dark album cover: genuinely deep obsidian / pitch-charcoal aesthetic with subtle moody glow
-      if (isCoverDark) {
-        return {
-          background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.18) 0%, transparent 50%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.14) 0%, transparent 54%), linear-gradient(145deg, #040508 0%, #07080d 55%, #030406 100%)`,
-        };
-      }
-      // White / Bright album cover: keep the frosted silver/pearl aesthetic, toned down so it's never blinding
-      if (isCoverBright) {
-        return {
-          background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.28) 0%, transparent 54%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.22) 0%, transparent 56%), radial-gradient(circle at 50% 44%, rgba(${palette.tertiaryRgb}, 0.16) 0%, transparent 64%), linear-gradient(145deg, rgba(${palette.primaryRgb}, 0.12) 0%, #11141c 56%, #0c0f16 100%)`,
-        };
-      }
+    // Liquid Theme (Default)
+    if (isCoverDark) {
       return {
-        background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.44) 0%, transparent 54%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.38) 0%, transparent 56%), radial-gradient(circle at 50% 44%, rgba(${palette.tertiaryRgb}, 0.24) 0%, transparent 64%), linear-gradient(145deg, rgba(${palette.primaryRgb}, 0.16) 0%, #090a10 56%, #0d1018 100%)`,
+        background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.18) 0%, transparent 50%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.14) 0%, transparent 54%), linear-gradient(145deg, #040508 0%, #07080d 55%, #030406 100%)`,
       };
     }
-
-    // Light Mode: softened slate-pearl backdrop so white/bright themes stay easy on the eyes
+    if (isCoverBright) {
+      return {
+        background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.28) 0%, transparent 54%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.22) 0%, transparent 56%), radial-gradient(circle at 50% 44%, rgba(${palette.tertiaryRgb}, 0.16) 0%, transparent 64%), linear-gradient(145deg, rgba(${palette.primaryRgb}, 0.12) 0%, #11141c 56%, #0c0f16 100%)`,
+      };
+    }
     return {
-      background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, ${
-        isCoverBright ? 0.22 : 0.32
-      }) 0%, transparent 54%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, ${
-        isCoverBright ? 0.18 : 0.26
-      }) 0%, transparent 56%), radial-gradient(circle at 50% 44%, rgba(${palette.tertiaryRgb}, 0.16) 0%, transparent 64%), linear-gradient(145deg, #c9d1de 0%, #dae0ea 100%)`,
+      background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.44) 0%, transparent 54%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.38) 0%, transparent 56%), radial-gradient(circle at 50% 44%, rgba(${palette.tertiaryRgb}, 0.24) 0%, transparent 64%), linear-gradient(145deg, rgba(${palette.primaryRgb}, 0.16) 0%, #090a10 56%, #0d1018 100%)`,
     };
-  }, [isSpotifyUi, isDark, isCoverDark, isCoverBright, palette.primaryRgb, palette.secondaryRgb, palette.tertiaryRgb]);
+  }, [isSpaceUi, isCoverDark, isCoverBright, palette.primaryRgb, palette.secondaryRgb, palette.tertiaryRgb]);
+
+  // Grouped Artist Index across Library + Offline Songs (for Artist Search & Saved Artists)
+  const allArtistsIndex = useMemo(() => {
+    const map = new Map<string, { name: string; songs: SubsonicSong[]; sampleSong: SubsonicSong }>();
+    const combined = [...librarySongs, ...offlineSongs];
+    const seenSongIds = new Set<string>();
+    for (const s of combined) {
+      if (!s || !s.id || seenSongIds.has(s.id)) continue;
+      seenSongIds.add(s.id);
+      const rawArtist = (s.artist || 'Unknown Artist').trim();
+      const key = rawArtist.toLowerCase();
+      const existing = map.get(key);
+      if (existing) {
+        existing.songs.push(s);
+      } else {
+        map.set(key, { name: rawArtist, songs: [s], sampleSong: s });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.songs.length - a.songs.length);
+  }, [librarySongs, offlineSongs]);
+
+  const spotlightMatchingArtists = useMemo(() => {
+    const q = spotlightQuery.trim().toLowerCase();
+    if (!q) return allArtistsIndex.slice(0, 6);
+    return allArtistsIndex
+      .filter((a) => a.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [allArtistsIndex, spotlightQuery]);
+
+  const selectedArtistSongs = useMemo(() => {
+    if (!selectedArtistName) return [];
+    const target = selectedArtistName.toLowerCase();
+    const match = allArtistsIndex.find((a) => a.name.toLowerCase() === target);
+    if (match) return match.songs;
+    return librarySongs.filter((s) => (s.artist || '').toLowerCase().includes(target));
+  }, [selectedArtistName, allArtistsIndex, librarySongs]);
+
+  const publicPlaylists = useMemo(() => {
+    const me = (username || '').trim().toLowerCase();
+    return playlists.filter((pl) => Boolean(pl.public) || (pl.owner && me && pl.owner.toLowerCase() !== me));
+  }, [playlists, username]);
+
+  const myPlaylists = useMemo(() => {
+    const me = (username || '').trim().toLowerCase();
+    if (!me) return playlists;
+    const owned = playlists.filter((pl) => !pl.owner || pl.owner.toLowerCase() === me);
+    return owned.length > 0 ? owned : playlists;
+  }, [playlists, username]);
+
+  const recentlyPlayedSongs = useMemo(() => {
+    const libMap = new Map(librarySongs.map((s) => [s.id, s]));
+    const statsList = Object.values(listeningStats.songStats || {})
+      .filter((st) => st && st.lastPlayedAt > 0)
+      .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
+    const out: SubsonicSong[] = [];
+    const seen = new Set<string>();
+    for (const st of statsList) {
+      const real = libMap.get(st.realId || st.id) || libMap.get(st.id);
+      if (real && !seen.has(real.id)) {
+        seen.add(real.id);
+        out.push(real);
+      }
+      if (out.length >= 10) break;
+    }
+    if (out.length < 6) {
+      for (const s of librarySongs) {
+        if (!seen.has(s.id)) {
+          seen.add(s.id);
+          out.push(s);
+        }
+        if (out.length >= 8) break;
+      }
+    }
+    return out;
+  }, [listeningStats, librarySongs]);
+
+  const randomHomeSongs = useMemo(() => {
+    if (librarySongs.length === 0) return [];
+    const copy = [...librarySongs];
+    let seed = randomSeed % 2147483647;
+    const nextRand = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(nextRand() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy.slice(0, 12);
+  }, [librarySongs, randomSeed]);
+
+  const openArtistPage = useCallback(
+    (artistName: string) => {
+      setSelectedArtistName(artistName);
+      setActiveView('library');
+      setLibrarySection('artists');
+      setSpotlightOpen(false);
+    },
+    [setActiveView]
+  );
 
   const dynamicAccentStyle: React.CSSProperties = {
     backgroundColor: `rgb(${palette.primaryRgb})`,
-    boxShadow: isSpotifyUi
-      ? `0 6px 20px rgba(${palette.primaryRgb}, 0.38)`
-      : `0 0 26px rgba(${palette.primaryRgb}, 0.48)`,
+    boxShadow: `0 0 26px rgba(${palette.primaryRgb}, 0.48)`,
     color: '#ffffff',
   };
 
@@ -2912,24 +2997,43 @@ export const App: React.FC = () => {
   const handleDiscoverSearch = async (
     e?: React.FormEvent,
     overrideSource?: 'spotify' | 'soundcloud' | 'youtube',
-    overrideQuery?: string
+    overrideQuery?: string,
+    loadMore = false
   ) => {
     if (e) e.preventDefault();
     const q = (overrideQuery !== undefined ? overrideQuery : discoverQuery).trim();
     if (!q) return;
     const src = overrideSource || discoverSource;
-    setDiscoverLoading(true);
-    setDiscoverIsPlaylist(false);
-    setDiscoverPlaylistName('');
+    const nextOffset = loadMore ? discoverOffset + 12 : 0;
+    if (loadMore) {
+      setDiscoverLoadingMore(true);
+    } else {
+      setDiscoverLoading(true);
+      setDiscoverIsPlaylist(false);
+      setDiscoverPlaylistName('');
+      setDiscoverOffset(0);
+      setDiscoverHasMore(false);
+    }
     try {
       const res = await fetch(
-        `/api/discover/search?q=${encodeURIComponent(q)}&source=${encodeURIComponent(src)}`
+        `/api/discover/search?q=${encodeURIComponent(q)}&source=${encodeURIComponent(src)}&limit=12&offset=${nextOffset}`
       );
       const data = await res.json();
-      const results = data.results || [];
-      setDiscoverResults(results);
+      const results: DiscoverResult[] = data.results || [];
+      if (loadMore) {
+        setDiscoverResults((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id));
+          const fresh = results.filter((r) => !existingIds.has(r.id));
+          return [...prev, ...fresh];
+        });
+        setDiscoverOffset(nextOffset);
+      } else {
+        setDiscoverResults(results);
+        setDiscoverOffset(0);
+      }
       setDiscoverIsPlaylist(Boolean(data.isPlaylist));
       setDiscoverPlaylistName(data.playlistName || '');
+      setDiscoverHasMore(Boolean(data.hasMore) && !data.isPlaylist && results.length > 0);
 
       if (Array.isArray(results) && results.length > 0 && !data.isPlaylist) {
         const batch: Record<string, string> = {};
@@ -2950,6 +3054,7 @@ export const App: React.FC = () => {
       notify('Search failed — please check connection');
     } finally {
       setDiscoverLoading(false);
+      setDiscoverLoadingMore(false);
     }
   };
 
@@ -4020,7 +4125,15 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* SLOW FLOATING LIQUID BUBBLES & ARTWORK REACTIVE AMBIENT LAYER + LIQUID SPLASH ON SONG TRANSITION */}
+      {/* THEME BACKGROUND: METEOR SHOWER / SPACE VISUALIZER OR LIQUID GLASS AMBIENT BUBBLES */}
+      {isSpaceUi ? (
+        <SpaceMeteorBackground
+          primaryRgb={palette.primaryRgb}
+          secondaryRgb={palette.secondaryRgb}
+          tertiaryRgb={palette.tertiaryRgb}
+          isPlaying={isPlaying}
+        />
+      ) : (
       <div className="pointer-events-none fixed inset-0 overflow-hidden z-0 ambient-liquid-layer">
         {coverUrl && (
           <div
@@ -4163,6 +4276,7 @@ export const App: React.FC = () => {
           }}
         />
       </div>
+      )}
 
       {/* Toast Notification */}
       <AnimatePresence>
@@ -4178,108 +4292,75 @@ export const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* 1. HEADER */}
+      {/* 1. UNIFIED TOP NAV BAR (Left: Brand + Navidrome Status | Middle: Search Song | Right: Mini-Player, Listen Along, Wrapped, Settings) */}
       <header
-        className={`relative z-20 flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl ${glassClass}`}
+        className={`relative z-20 grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl ${glassClass}`}
       >
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+        {/* Left Side: Liquid Audio + Status of Navidrome connection */}
+        <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={() =>
-              setActiveView(activeView === 'nowPlaying' ? 'queue' : 'nowPlaying')
-            }
-            className="lg:hidden p-1.5 sm:p-2 rounded-xl hover:bg-white/10 transition shrink-0"
-            title="Back / Toggle View"
+            onClick={() => setActiveView('home')}
+            className="flex items-center gap-2 text-left min-w-0 hover:opacity-90 transition"
+            title="Liquid Audio Home"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <Disc3
+              className={`w-5 h-5 shrink-0 ${isPlaying ? 'animate-spin' : ''}`}
+              style={{ color: `rgb(${palette.primaryRgb})`, animationDuration: '8s' }}
+            />
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-bold tracking-tight truncate leading-tight">
+                Liquid Audio
+              </p>
+              <p className="text-[9px] sm:text-[10px] font-semibold opacity-75 flex items-center gap-1 truncate leading-tight">
+                <span
+                  className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                    isNetworkOffline
+                      ? 'bg-amber-400'
+                      : isConnected
+                      ? 'bg-emerald-400'
+                      : 'bg-rose-400'
+                  }`}
+                />
+                <span className="truncate">
+                  {isNetworkOffline
+                    ? 'Offline Mode'
+                    : isConnected
+                    ? 'Navidrome Connected'
+                    : 'Not Connected'}
+                </span>
+              </p>
+            </div>
           </button>
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] sm:text-[10px] uppercase tracking-widest opacity-60 font-semibold flex items-center gap-1.5 truncate">
-              <span className="truncate">
-                Liquid Audio •{' '}
-                {isNetworkOffline
-                  ? 'Offline Mode'
-                  : isConnected
-                  ? 'Connected'
-                  : 'Offline Ready'}
-              </span>
-              {isNetworkOffline && <WifiOff className="w-3 h-3 text-amber-400 shrink-0" />}
-            </p>
-            <h1
-              className={`text-xs sm:text-base font-bold tracking-tight truncate ${
-                activeView === 'nowPlaying' ? 'lg:hidden' : ''
-              }`}
-            >
-              {activeView === 'nowPlaying'
-                ? 'Now Playing'
-                : activeView === 'stats'
-                ? 'Liquid Wrapped'
-                : activeView === 'queue'
-                ? queueTab === 'discover'
-                  ? 'Add Songs & Playlists'
-                  : queueTab === 'offline'
-                  ? 'Offline Playlists'
-                  : 'Queue & Library'
-                : 'Synced Lyrics'}
-            </h1>
-          </div>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Instant Song Spotlight Trigger (Ctrl+K) */}
+        {/* Middle: Search Song & Artists */}
+        <div className="flex justify-center px-1 sm:px-2 min-w-0">
           <button
             onClick={() => setSpotlightOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-black/25 hover:bg-black/35 border border-white/15 transition"
-            title="Instant Library Search (Ctrl+K)"
+            className="w-full max-w-md flex items-center justify-between gap-2 px-3 py-1.5 sm:py-2 rounded-xl text-xs bg-black/30 hover:bg-black/40 border border-white/15 transition"
+            title="Search songs & artists (Ctrl+K)"
           >
-            <Search className="w-3.5 h-3.5 opacity-80" />
-            <span className="hidden md:inline opacity-75">Find song...</span>
-            <kbd className="hidden md:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 opacity-70">
+            <span className="flex items-center gap-2 min-w-0 opacity-80">
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Search songs & artists...</span>
+            </span>
+            <kbd className="hidden md:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 opacity-70 shrink-0">
               ⌘K
             </kbd>
           </button>
+        </div>
 
-          {/* Liquid Wrapped Quick Button */}
-          <button
-            onClick={() => setActiveView(activeView === 'stats' ? 'queue' : 'stats')}
-            style={activeView === 'stats' ? dynamicAccentStyle : undefined}
-            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
-              activeView === 'stats' ? '' : 'bg-white/10 hover:bg-white/20'
-            }`}
-            title="Liquid Wrapped & Listening Stats"
-          >
-            <Trophy
-              className="w-3.5 h-3.5"
-              style={activeView !== 'stats' ? { color: `rgb(${palette.primaryRgb})` } : undefined}
-            />
-            <span className="hidden md:inline">Wrapped</span>
-          </button>
-
-          {/* Equalizer & Crossfade Studio Button */}
-          <button
-            onClick={() => setEqModalOpen(true)}
-            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
-              eqPreset !== 'Flat' || bassBoost > 0 || playbackRate !== 1
-                ? 'bg-white/20'
-                : 'bg-white/10 hover:bg-white/20'
-            }`}
-            title="Equalizer, 808 Bass Boost & Seamless Crossfade Studio"
-          >
-            <Sliders
-              className="w-3.5 h-3.5"
-              style={{ color: `rgb(${palette.primaryRgb})` }}
-            />
-            <span className="hidden sm:inline">EQ & Mix</span>
-          </button>
-
-          {/* Pop-Out Mini Player Button (Desktop) */}
+        {/* Right Side: Mini-Player, Listen Along, Wrapped, Settings */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Mini-Player Button */}
           <button
             onClick={toggleMiniPlayer}
-            className={`hidden sm:flex p-2 rounded-xl transition ${
+            className={`hidden sm:flex items-center gap-1 p-2 rounded-xl transition ${
               pipWindow || inAppMiniPlayer
                 ? 'bg-white/25 text-white'
-                : 'hover:bg-white/10'
+                : 'bg-white/10 hover:bg-white/20'
             }`}
-            title="Pop-Out Liquid Glass Mini Player"
+            title="Mini Player"
           >
             <PictureInPicture2
               className="w-4 h-4"
@@ -4291,82 +4372,45 @@ export const App: React.FC = () => {
             />
           </button>
 
-          {/* Desktop PWA Install Button */}
-          {deferredPrompt && (
-            <button
-              onClick={handleInstallPwa}
-              style={dynamicAccentStyle}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition"
-              title="Install Liquid Audio Desktop App Shortcut"
-            >
-              <MonitorDown className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Install App</span>
-            </button>
-          )}
-
-          <button
-            onClick={cycleVisualizerMode}
-            className="hidden sm:flex p-2 rounded-xl hover:bg-white/10 transition items-center gap-1"
-            title={`Visualizer Mode: ${visualizerMode.toUpperCase()} (Click to cycle 6 styles)`}
-          >
-            <Activity
-              className="w-4 h-4 transition-colors duration-500"
-              style={{ color: `rgb(${palette.primaryRgb})` }}
-            />
-          </button>
-
-          {/* Live Listeners & Listen Along */}
+          {/* Listen Along Button */}
           <button
             onClick={() => setListenAlongModalOpen(true)}
             style={listeningAlongTo ? dynamicAccentStyle : undefined}
             className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
               listeningAlongTo ? '' : 'bg-white/10 hover:bg-white/20'
             }`}
-            title="See who's listening & Listen Along"
+            title="Listen Along"
           >
             <Users className="w-3.5 h-3.5" />
             <span>
               {activeListeners.filter((s) => s.sessionId !== clientSessionId).length}
             </span>
-            {listeningAlongTo && (
-              <span className="hidden md:inline truncate max-w-[90px]">
-                •{' '}
-                {activeListeners.find(
-                  (s) =>
-                    s.sessionId.toLowerCase() === listeningAlongTo.toLowerCase() ||
-                    s.username.toLowerCase() === listeningAlongTo.toLowerCase()
-                )?.username || listeningAlongTo}
-              </span>
-            )}
           </button>
 
-          {/* Privacy-Safe Discord Rich Presence */}
+          {/* Wrapped Button */}
           <button
-            onClick={() => setDiscordModalOpen(true)}
-            className={`hidden sm:flex p-2 rounded-xl transition ${
-              discordRpcEnabled ? 'bg-indigo-500/25 text-indigo-200' : 'hover:bg-white/10'
+            onClick={() => setActiveView(activeView === 'stats' ? 'home' : 'stats')}
+            style={activeView === 'stats' ? dynamicAccentStyle : undefined}
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+              activeView === 'stats' ? '' : 'bg-white/10 hover:bg-white/20'
             }`}
-            title="Discord Rich Presence (private, no links)"
+            title="Liquid Wrapped"
           >
-            <Gamepad2 className="w-4 h-4" />
+            <Trophy
+              className="w-3.5 h-3.5"
+              style={activeView !== 'stats' ? { color: `rgb(${palette.primaryRgb})` } : undefined}
+            />
+            <span className="hidden md:inline">Wrapped</span>
           </button>
 
-          <button
-            onClick={toggleTheme}
-            className="p-1.5 sm:p-2 rounded-xl hover:bg-white/10 transition"
-            title="Toggle Dark/Light Liquid Glass"
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-
+          {/* Settings Button (Themes, Navidrome Connection, EQ, Discord RPC, Song Sharing) */}
           <button
             onClick={() => setAuthModalOpen(true)}
-            className={`p-1.5 sm:p-2 rounded-xl hover:bg-white/10 transition ${
-              isConnected ? 'text-emerald-400' : 'text-amber-400'
-            }`}
-            title="Navidrome Server Connection"
+            className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold transition"
+            title="Settings (Themes, Navidrome Connection, EQ & More)"
           >
-            <Server className="w-4 h-4" />
+            <Settings className="w-4 h-4" />
+            <span className="hidden lg:inline">Settings</span>
           </button>
         </div>
       </header>
@@ -4378,7 +4422,7 @@ export const App: React.FC = () => {
           onMouseMove={handleNowPlayingMouseMove}
           onMouseLeave={handleNowPlayingMouseLeave}
           className={`flex-1 min-h-0 flex flex-col justify-between rounded-3xl p-3 sm:p-4 lg:p-5 overflow-hidden ${glassClass} ${
-            activeView !== 'nowPlaying' ? 'hidden lg:flex' : 'flex'
+            activeView !== 'home' ? 'hidden lg:flex' : 'flex'
           }`}
         >
           {/* 3D Floating & Mouse-Rotating Artwork Stage */}
@@ -4812,14 +4856,207 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Lyrics, Liquid Wrapped Stats, OR Queue / Library / Playlists / Offline Playlists / Discover */}
+        {/* RIGHT COLUMN: Home Feed, Lyrics, Library, Add, Queue, OR Liquid Wrapped Stats */}
         <div
           className={`flex-1 min-h-0 flex flex-col rounded-3xl p-3.5 sm:p-5 overflow-hidden ${glassClass} ${
-            activeView === 'nowPlaying' ? 'hidden lg:flex' : 'flex'
+            activeView === 'home' ? 'hidden lg:flex' : 'flex'
           }`}
         >
           <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
-            {activeView === 'stats' ? (
+            {activeView === 'home' ? (
+              /* HOME PAGE RIGHT SIDE: Public Playlists, Recently Played, Random Songs */
+              <div className="flex flex-col h-full overflow-y-auto pr-1 space-y-5">
+                {/* 1. Public Playlists */}
+                <section className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs sm:text-sm font-bold flex items-center gap-2">
+                      <Users className="w-4 h-4" style={{ color: `rgb(${palette.primaryRgb})` }} />
+                      <span>Public Playlists</span>
+                    </h3>
+                    <span className="text-[10px] opacity-55">
+                      {publicPlaylists.length} available
+                    </span>
+                  </div>
+                  {publicPlaylists.length === 0 ? (
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-xs opacity-60">
+                      No public playlists found on Navidrome yet.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {publicPlaylists.slice(0, 6).map((pl) => (
+                        <div
+                          key={pl.id}
+                          onClick={() => {
+                            selectPlaylist(pl.id);
+                            setActiveView('library');
+                            setLibrarySection('playlists');
+                            setQueueTab('playlists');
+                          }}
+                          className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold truncate">{pl.name}</p>
+                            <p className="text-[10px] opacity-60 truncate">
+                              {pl.songCount} tracks • {pl.owner || 'Public'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const created = await copyPublicPlaylistToMine(pl.id);
+                              if (created) {
+                                notify(`Added "${pl.name}" to Your Playlists!`);
+                              } else {
+                                notify(`Could not copy "${pl.name}"`);
+                              }
+                            }}
+                            className="px-2 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-[10px] font-semibold shrink-0 flex items-center gap-1"
+                            title="Add this public playlist to Your Playlists"
+                          >
+                            <Plus className="w-3 h-3" /> Save
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* 2. Recently Played */}
+                <section className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs sm:text-sm font-bold flex items-center gap-2">
+                      <Clock className="w-4 h-4" style={{ color: `rgb(${palette.primaryRgb})` }} />
+                      <span>Recently Played</span>
+                    </h3>
+                    {recentlyPlayedSongs.length > 0 && (
+                      <button
+                        onClick={() => playSong(recentlyPlayedSongs[0], recentlyPlayedSongs)}
+                        className="text-[10px] font-semibold px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 transition"
+                      >
+                        Play All
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    {recentlyPlayedSongs.slice(0, 6).map((song) => {
+                      const thumb = getSongThumbUrl(song);
+                      return (
+                        <div
+                          key={`recent-${song.id}`}
+                          onClick={() => playSong(song, recentlyPlayedSongs)}
+                          className="flex items-center justify-between gap-2.5 p-2 rounded-2xl hover:bg-white/10 cursor-pointer transition"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="w-9 h-9 rounded-xl overflow-hidden bg-black/30 border border-white/10 shrink-0 flex items-center justify-center">
+                              {thumb ? (
+                                <img src={thumb} alt={song.title} className="w-full h-full object-cover" loading="lazy" />
+                              ) : (
+                                <Disc3 className="w-4 h-4 opacity-50" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold truncate">{song.title}</p>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openArtistPage(song.artist);
+                                }}
+                                className="text-[11px] opacity-60 hover:opacity-100 hover:underline truncate block text-left"
+                              >
+                                {song.artist}
+                              </button>
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addToQueue(song);
+                              notify(`Added "${song.title}" to queue`);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-white/10 opacity-75 hover:opacity-100 shrink-0"
+                            title="Add to Queue"
+                          >
+                            <ListPlus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* 3. Random Songs */}
+                <section className="space-y-2 pb-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs sm:text-sm font-bold flex items-center gap-2">
+                      <Shuffle className="w-4 h-4" style={{ color: `rgb(${palette.primaryRgb})` }} />
+                      <span>Random Songs</span>
+                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setRandomSeed(Date.now())}
+                        className="text-[10px] font-semibold px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1 transition"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Shuffle
+                      </button>
+                      {randomHomeSongs.length > 0 && (
+                        <button
+                          onClick={() => playSong(randomHomeSongs[0], randomHomeSongs)}
+                          style={dynamicAccentStyle}
+                          className="text-[10px] font-semibold px-2.5 py-1 rounded-xl transition"
+                        >
+                          Play All
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {randomHomeSongs.map((song) => {
+                      const thumb = getSongThumbUrl(song);
+                      return (
+                        <div
+                          key={`rand-${song.id}`}
+                          onClick={() => playSong(song, randomHomeSongs)}
+                          className="flex items-center justify-between gap-2.5 p-2 rounded-2xl hover:bg-white/10 cursor-pointer transition"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="w-9 h-9 rounded-xl overflow-hidden bg-black/30 border border-white/10 shrink-0 flex items-center justify-center">
+                              {thumb ? (
+                                <img src={thumb} alt={song.title} className="w-full h-full object-cover" loading="lazy" />
+                              ) : (
+                                <Disc3 className="w-4 h-4 opacity-50" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold truncate">{song.title}</p>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openArtistPage(song.artist);
+                                }}
+                                className="text-[11px] opacity-60 hover:opacity-100 hover:underline truncate block text-left"
+                              >
+                                {song.artist}
+                              </button>
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addToQueue(song);
+                              notify(`Added "${song.title}" to queue`);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-white/10 opacity-75 hover:opacity-100 shrink-0"
+                            title="Add to Queue"
+                          >
+                            <ListPlus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
+            ) : activeView === 'stats' ? (
             /* LIQUID WRAPPED & LISTENING STATS DASHBOARD */
             <div className="flex flex-col h-full overflow-y-auto pr-1 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-white/10">
@@ -5715,69 +5952,355 @@ export const App: React.FC = () => {
               )}
             </div>
           ) : (
-            /* QUEUE, LIBRARY, PLAYLISTS, OFFLINE PLAYLIST VAULT & ADD MUSIC PANEL */
+            /* LIBRARY, ADD MUSIC, OR QUEUE PANEL */
             <div className="flex flex-col h-full">
-              {/* Sub-navigation tabs (horizontally scrollable on mobile, zero awkward wrapping) */}
-              <div className="pb-2.5 border-b border-white/10">
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-black/25 p-1 liquid-tab-capsule">
-                  {[
-                    { id: 'queue', label: `Queue (${queue.length})` },
-                    { id: 'library', label: `Library (${librarySongs.length})` },
-                    {
-                      id: 'liked',
-                      label: `Liked (${allLikedSongs.length})`,
-                      icon: Heart,
-                    },
-                    { id: 'playlists', label: `Playlists (${playlists.length})` },
-                    {
-                      id: 'offline',
-                      label: `Offline (${offlineSongs.length})`,
-                      icon: HardDriveDownload,
-                    },
-                    { id: 'discover', label: 'Add Music', icon: Compass },
-                  ].map((tab) => {
-                    const isTabActive = queueTab === tab.id;
-                    const IconComp = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setQueueTab(tab.id as any)}
-                        className={`relative px-3 py-1.5 text-xs font-semibold shrink-0 rounded-full transition-colors duration-200 select-none flex items-center gap-1 ${
-                          isTabActive ? 'text-white' : 'opacity-70 hover:opacity-100 text-white'
-                        }`}
-                      >
-                        {isTabActive && (
-                          <div
-                            className="absolute inset-0 rounded-full transition-colors duration-200"
-                            style={{
-                              backgroundColor: `rgb(${palette.primaryRgb})`,
-                              boxShadow: `0 2px 10px rgba(${palette.primaryRgb}, 0.45)`,
-                            }}
-                          />
-                        )}
-                        <span className="relative z-10 flex items-center gap-1">
-                          {IconComp && <IconComp className="w-3.5 h-3.5" />}
-                          <span>{tab.label}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => setActiveView('stats')}
-                    className="relative px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 opacity-75 hover:opacity-100 transition-colors flex items-center gap-1 text-white"
-                  >
-                    <Trophy
-                      className="w-3.5 h-3.5"
-                      style={{ color: `rgb(${palette.primaryRgb})` }}
-                    />
-                    <span>Wrapped</span>
-                  </button>
+              {/* Sub-navigation tabs ONLY when inside Library (ordered: Offline, Liked, Your Playlists, Saved Artists, All Songs) */}
+              {activeView === 'library' && (
+                <div className="pb-2.5 border-b border-white/10">
+                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-black/25 p-1 liquid-tab-capsule">
+                    {[
+                      {
+                        id: 'offline',
+                        label: `Offline (${offlineSongs.length})`,
+                        icon: HardDriveDownload,
+                      },
+                      {
+                        id: 'liked',
+                        label: `Liked (${allLikedSongs.length})`,
+                        icon: Heart,
+                      },
+                      {
+                        id: 'playlists',
+                        label: `Playlists (${playlists.length})`,
+                        icon: Folder,
+                      },
+                      {
+                        id: 'artists',
+                        label: `Artists (${savedArtists.length})`,
+                        icon: User,
+                      },
+                      {
+                        id: 'library',
+                        label: `All Songs (${librarySongs.length})`,
+                        icon: Disc3,
+                      },
+                    ].map((tab) => {
+                      const isTabActive =
+                        tab.id === 'artists'
+                          ? librarySection === 'artists'
+                          : librarySection !== 'artists' && queueTab === tab.id;
+                      const IconComp = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            if (tab.id === 'artists') {
+                              setLibrarySection('artists');
+                            } else {
+                              setLibrarySection(tab.id as any);
+                              setSelectedArtistName(null);
+                              setQueueTab(tab.id as any);
+                            }
+                          }}
+                          className={`relative px-3 py-1.5 text-xs font-semibold shrink-0 rounded-full transition-colors duration-200 select-none flex items-center gap-1 ${
+                            isTabActive ? 'text-white' : 'opacity-70 hover:opacity-100 text-white'
+                          }`}
+                        >
+                          {isTabActive && (
+                            <div
+                              className="absolute inset-0 rounded-full transition-colors duration-200"
+                              style={{
+                                backgroundColor: `rgb(${palette.primaryRgb})`,
+                                boxShadow: `0 2px 10px rgba(${palette.primaryRgb}, 0.45)`,
+                              }}
+                            />
+                          )}
+                          <span className="relative z-10 flex items-center gap-1">
+                            {IconComp && <IconComp className="w-3.5 h-3.5" />}
+                            <span>{tab.label}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Tab Content */}
               <div className="flex-1 overflow-y-auto mt-3 space-y-1.5 pr-1">
-                {queueTab === 'queue' && (
+                {/* SAVED ARTISTS & ARTIST DETAIL VIEW */}
+                {activeView === 'library' && librarySection === 'artists' && (
+                  <div className="space-y-3">
+                    {selectedArtistName ? (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-white/10">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <button
+                              onClick={() => setSelectedArtistName(null)}
+                              className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition shrink-0"
+                              title="Back to Artists"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <div className="min-w-0">
+                              <h3 className="text-sm font-bold truncate">{selectedArtistName}</h3>
+                              <p className="text-[11px] opacity-60">
+                                {selectedArtistSongs.length} song{selectedArtistSongs.length === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              onClick={() => {
+                                toggleSaveArtist(selectedArtistName);
+                                const isNowSaved = !savedArtists.some(
+                                  (a) => a.toLowerCase() === selectedArtistName.toLowerCase()
+                                );
+                                notify(
+                                  isNowSaved
+                                    ? `Saved artist "${selectedArtistName}"`
+                                    : `Removed "${selectedArtistName}" from Saved Artists`
+                                );
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 flex items-center gap-1 transition"
+                            >
+                              {savedArtists.some(
+                                (a) => a.toLowerCase() === selectedArtistName.toLowerCase()
+                              ) ? (
+                                <>
+                                  <BookmarkCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>Saved</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Bookmark className="w-3.5 h-3.5" />
+                                  <span>Save Artist</span>
+                                </>
+                              )}
+                            </button>
+                            {selectedArtistSongs.length > 0 && (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    notify(`Downloading ${selectedArtistSongs.length} tracks by ${selectedArtistName}...`);
+                                    for (const s of selectedArtistSongs) {
+                                      if (!downloadedSongIds[s.id]) {
+                                        await downloadSongForOffline(s, selectedArtistName);
+                                      }
+                                    }
+                                    notify(`Downloaded all songs by ${selectedArtistName}!`);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 flex items-center gap-1 transition"
+                                >
+                                  <Download className="w-3.5 h-3.5" /> Download All
+                                </button>
+                                <button
+                                  onClick={() => playSong(selectedArtistSongs[0], selectedArtistSongs)}
+                                  style={dynamicAccentStyle}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
+                                >
+                                  <Play className="w-3.5 h-3.5 fill-current" /> Play All
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          {selectedArtistSongs.map((song) => {
+                            const thumb = getSongThumbUrl(song);
+                            const menuKey = `artist-${song.id}`;
+                            return (
+                              <div
+                                key={song.id}
+                                className="flex items-center justify-between gap-2 p-2 rounded-2xl hover:bg-white/10 transition relative"
+                              >
+                                <div
+                                  onClick={() => playSong(song, selectedArtistSongs)}
+                                  className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
+                                >
+                                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-black/30 border border-white/10 shrink-0 flex items-center justify-center">
+                                    {thumb ? (
+                                      <img src={thumb} alt={song.title} className="w-full h-full object-cover" loading="lazy" />
+                                    ) : (
+                                      <Disc3 className="w-4 h-4 opacity-50" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold truncate">{song.title}</p>
+                                    <p className="text-[11px] opacity-60 truncate">
+                                      {song.album || song.artist} • {formatTime(song.duration)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 relative">
+                                  <button
+                                    onClick={() => {
+                                      addToQueue(song);
+                                      notify(`Added "${song.title}" to queue`);
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 opacity-80 hover:opacity-100"
+                                    title="Add to Queue"
+                                  >
+                                    <ListPlus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setOpenRowMenuId(openRowMenuId === menuKey ? null : menuKey)
+                                    }
+                                    className="p-1.5 rounded-lg hover:bg-white/10 opacity-80 hover:opacity-100"
+                                    title="More options"
+                                  >
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </button>
+                                  {openRowMenuId === menuKey && (
+                                    <div className="absolute right-0 top-9 z-40 w-36 rounded-xl bg-[#10131e] border border-white/15 shadow-2xl py-1 text-xs">
+                                      <button
+                                        onClick={() => {
+                                          setOpenRowMenuId(null);
+                                          downloadSongForOffline(song, selectedArtistName);
+                                        }}
+                                        className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2"
+                                      >
+                                        <Download className="w-3.5 h-3.5" /> Download
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setOpenRowMenuId(null);
+                                          handleShare(song);
+                                        }}
+                                        className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2"
+                                      >
+                                        <Share2 className="w-3.5 h-3.5" /> Share
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setOpenRowMenuId(null);
+                                          openAddToPlaylistModal(song);
+                                        }}
+                                        className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2"
+                                      >
+                                        <FolderPlus className="w-3.5 h-3.5" /> Add to Playlist
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <h4 className="text-[11px] uppercase tracking-wider font-bold opacity-65 px-1">
+                            Saved Artists ({savedArtists.length})
+                          </h4>
+                          {savedArtists.length === 0 ? (
+                            <p className="text-xs opacity-55 px-2 py-3 bg-white/5 rounded-2xl border border-white/10">
+                              No saved artists yet — search for any artist or tap an artist below to save them to your account.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {savedArtists.map((artistName) => {
+                                const info = allArtistsIndex.find(
+                                  (a) => a.name.toLowerCase() === artistName.toLowerCase()
+                                );
+                                const thumb = info ? getSongThumbUrl(info.sampleSong) : '';
+                                return (
+                                  <div
+                                    key={`saved-artist-${artistName}`}
+                                    onClick={() => setSelectedArtistName(artistName)}
+                                    className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition"
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="w-10 h-10 rounded-full overflow-hidden bg-black/30 border border-white/15 shrink-0 flex items-center justify-center">
+                                        {thumb ? (
+                                          <img src={thumb} alt={artistName} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <User className="w-4 h-4 opacity-60" />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-bold truncate">{artistName}</p>
+                                        <p className="text-[10px] opacity-60">
+                                          {info?.songs.length || 0} songs
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleSaveArtist(artistName);
+                                      }}
+                                      className="p-1.5 rounded-lg hover:bg-white/10 text-emerald-400"
+                                      title="Remove Saved Artist"
+                                    >
+                                      <BookmarkCheck className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                          <h4 className="text-[11px] uppercase tracking-wider font-bold opacity-65 px-1">
+                            All Library Artists ({allArtistsIndex.length})
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {allArtistsIndex.slice(0, 40).map((artist) => {
+                              const thumb = getSongThumbUrl(artist.sampleSong);
+                              const isSaved = savedArtists.some(
+                                (a) => a.toLowerCase() === artist.name.toLowerCase()
+                              );
+                              return (
+                                <div
+                                  key={`all-artist-${artist.name}`}
+                                  onClick={() => setSelectedArtistName(artist.name)}
+                                  className="flex items-center justify-between gap-2 p-2 rounded-2xl hover:bg-white/10 cursor-pointer transition"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-9 h-9 rounded-full overflow-hidden bg-black/30 border border-white/10 shrink-0 flex items-center justify-center">
+                                      {thumb ? (
+                                        <img src={thumb} alt={artist.name} className="w-full h-full object-cover" loading="lazy" />
+                                      ) : (
+                                        <User className="w-4 h-4 opacity-50" />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-semibold truncate">{artist.name}</p>
+                                      <p className="text-[10px] opacity-55">
+                                        {artist.songs.length} track{artist.songs.length === 1 ? '' : 's'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleSaveArtist(artist.name);
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 opacity-75 hover:opacity-100"
+                                    title={isSaved ? 'Unsave Artist' : 'Save Artist'}
+                                  >
+                                    {isSaved ? (
+                                      <BookmarkCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                    ) : (
+                                      <Bookmark className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {activeView === 'queue' && (
                   <>
                     {queue.length === 0 ? (
                       <div className="h-full flex items-center justify-center text-xs opacity-50">
@@ -5963,7 +6486,7 @@ export const App: React.FC = () => {
                   </>
                 )}
 
-                {queueTab === 'library' && (
+                {activeView === 'library' && librarySection !== 'artists' && queueTab === 'library' && (
                   <>
                     <div className="mb-2.5 space-y-2">
                       <div className="relative flex items-center">
@@ -6085,6 +6608,7 @@ export const App: React.FC = () => {
                             <button
                               onClick={() => {
                                 setDiscoverQuery(searchQuery);
+                                setActiveView('add');
                                 setQueueTab('discover');
                                 handleDiscoverSearch(undefined, discoverSource, searchQuery);
                               }}
@@ -6142,7 +6666,7 @@ export const App: React.FC = () => {
                   </>
                 )}
 
-                {queueTab === 'liked' && (
+                {activeView === 'library' && librarySection !== 'artists' && queueTab === 'liked' && (
                   <div className="space-y-3">
                     {/* Liked Songs Hero Card */}
                     <div
@@ -6255,7 +6779,7 @@ export const App: React.FC = () => {
                   </div>
                 )}
 
-                {queueTab === 'playlists' && (
+                {activeView === 'library' && librarySection !== 'artists' && queueTab === 'playlists' && (
                   <div className="flex flex-col gap-3">
                     <div className="flex gap-2">
                       <input
@@ -6477,10 +7001,10 @@ export const App: React.FC = () => {
                             >
                               <div className="flex items-center gap-2 flex-1 min-w-0">
                                 <div
-                                  className="cursor-grab active:cursor-grabbing text-white/30 hover:text-white/80 transition -mr-1 p-0.5 hidden sm:flex items-center shrink-0"
+                                  className="cursor-grab active:cursor-grabbing text-white/40 hover:text-white/90 transition -mr-0.5 p-1 flex items-center shrink-0"
                                   title="Drag to reorder (Shift-select multiple to move as a group)"
                                 >
-                                  <GripVertical className="w-3.5 h-3.5" />
+                                  <GripVertical className="w-4 h-4" />
                                 </div>
 
                                 <button
@@ -6513,7 +7037,7 @@ export const App: React.FC = () => {
                                   <p className="text-[11px] opacity-60 truncate">{song.artist}</p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 relative shrink-0">
                                 <button
                                   onClick={() => {
                                     addToQueue(song);
@@ -6522,36 +7046,73 @@ export const App: React.FC = () => {
                                   className="p-1.5 rounded-lg hover:bg-white/10 text-xs text-white/75 hover:text-white"
                                   title="Add to Queue"
                                 >
-                                  <Plus className="w-3.5 h-3.5" />
+                                  <ListPlus className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  onClick={() =>
-                                    reorderPlaylistTracks(selectedPlaylist.id, idx, idx - 1)
-                                  }
-                                  disabled={idx === 0}
-                                  className="p-1 rounded hover:bg-white/10 disabled:opacity-20"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const mk = `pl-${selectedPlaylist.id}-${idx}`;
+                                    setOpenRowMenuId(openRowMenuId === mk ? null : mk);
+                                  }}
+                                  className="p-1.5 rounded-lg hover:bg-white/10 text-white/75 hover:text-white"
+                                  title="Download, Share, Move, or Delete"
                                 >
-                                  <ArrowUp className="w-3.5 h-3.5" />
+                                  <MoreHorizontal className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() =>
-                                    reorderPlaylistTracks(selectedPlaylist.id, idx, idx + 1)
-                                  }
-                                  disabled={
-                                    idx === (selectedPlaylist.entry?.length || 1) - 1
-                                  }
-                                  className="p-1 rounded hover:bg-white/10 disabled:opacity-20"
-                                >
-                                  <ArrowDown className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    removeSongFromPlaylist(selectedPlaylist.id, idx)
-                                  }
-                                  className="p-1 rounded hover:bg-red-500/20 text-red-300"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                {openRowMenuId === `pl-${selectedPlaylist.id}-${idx}` && (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute right-0 top-9 z-40 w-40 rounded-xl bg-[#10131e] border border-white/15 shadow-2xl py-1 text-xs"
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        setOpenRowMenuId(null);
+                                        downloadSongForOffline(song, selectedPlaylist.name);
+                                      }}
+                                      className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2"
+                                    >
+                                      <Download className="w-3.5 h-3.5" /> Download
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setOpenRowMenuId(null);
+                                        handleShare(song);
+                                      }}
+                                      className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2"
+                                    >
+                                      <Share2 className="w-3.5 h-3.5" /> Share
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setOpenRowMenuId(null);
+                                        reorderPlaylistTracks(selectedPlaylist.id, idx, idx - 1);
+                                      }}
+                                      disabled={idx === 0}
+                                      className="w-full px-3 py-1.5 text-left hover:bg-white/10 disabled:opacity-30 flex items-center gap-2"
+                                    >
+                                      <ArrowUp className="w-3.5 h-3.5" /> Move Up
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setOpenRowMenuId(null);
+                                        reorderPlaylistTracks(selectedPlaylist.id, idx, idx + 1);
+                                      }}
+                                      disabled={idx === (selectedPlaylist.entry?.length || 1) - 1}
+                                      className="w-full px-3 py-1.5 text-left hover:bg-white/10 disabled:opacity-30 flex items-center gap-2"
+                                    >
+                                      <ArrowDown className="w-3.5 h-3.5" /> Move Down
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setOpenRowMenuId(null);
+                                        removeSongFromPlaylist(selectedPlaylist.id, idx);
+                                      }}
+                                      className="w-full px-3 py-1.5 text-left hover:bg-red-500/20 text-red-300 flex items-center gap-2"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -6822,6 +7383,61 @@ export const App: React.FC = () => {
 
                               {/* Render Uncategorized Playlists */}
                               {uncategorizedPlaylists.map((pl) => renderPlaylistRow(pl, null))}
+
+                              {/* Public Playlists from other users — Add to Your Playlists */}
+                              {publicPlaylists.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-white/10">
+                                  <div className="flex items-center justify-between mb-2 px-1">
+                                    <span className="text-[11px] uppercase tracking-wider font-bold opacity-65">
+                                      Public Playlists
+                                    </span>
+                                    <span className="text-[10px] opacity-45">
+                                      Add any to Your Playlists
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1.5">
+                                    {publicPlaylists.map((pl) => (
+                                      <div
+                                        key={`pub-lib-${pl.id}`}
+                                        className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition"
+                                      >
+                                        <button
+                                          onClick={() => selectPlaylist(pl.id)}
+                                          className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+                                        >
+                                          <div
+                                            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                                            style={{ backgroundColor: `rgba(${palette.primaryRgb}, 0.22)` }}
+                                          >
+                                            <ListMusic className="w-4 h-4" />
+                                          </div>
+                                          <div className="min-w-0">
+                                            <p className="text-xs font-semibold truncate">{pl.name}</p>
+                                            <p className="text-[10px] opacity-55 truncate">
+                                              {pl.songCount} tracks{pl.owner ? ` • by ${pl.owner}` : ''}
+                                            </p>
+                                          </div>
+                                        </button>
+                                        <button
+                                          onClick={async () => {
+                                            const ok = await copyPublicPlaylistToMine(pl.id);
+                                            if (ok) {
+                                              notify(`Added "${pl.name}" to Your Playlists!`);
+                                            } else {
+                                              notify(`Could not add "${pl.name}" to Your Playlists.`);
+                                            }
+                                          }}
+                                          className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[11px] font-semibold shrink-0 flex items-center gap-1 transition"
+                                          title="Copy this public playlist into Your Playlists"
+                                        >
+                                          <Plus className="w-3 h-3" />
+                                          <span>Add to Mine</span>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </>
                           );
                         })()}
@@ -6830,7 +7446,7 @@ export const App: React.FC = () => {
                   </div>
                 )}
 
-                {queueTab === 'offline' && (
+                {activeView === 'library' && librarySection !== 'artists' && queueTab === 'offline' && (
                   /* OFFLINE DEVICE VAULT SORTED INTO PLAYLISTS ON PHONE/PC */
                   <div className="flex flex-col gap-2.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white/5 p-3 rounded-2xl border border-white/10">
@@ -7119,7 +7735,7 @@ export const App: React.FC = () => {
                   </div>
                 )}
 
-                {queueTab === 'discover' && (
+                {activeView === 'add' && (
                   <div className="flex flex-col gap-3">
                     {/* Platform Provider Selector */}
                     <div className="flex items-center gap-1.5 bg-black/25 p-1 rounded-xl">
@@ -7347,6 +7963,30 @@ export const App: React.FC = () => {
                           );
                         })
                       )}
+
+                      {/* Load More Songs Button */}
+                      {discoverResults.length > 0 && discoverHasMore && !discoverIsPlaylist && (
+                        <div className="pt-2 pb-1 flex justify-center">
+                          <button
+                            type="button"
+                            disabled={discoverLoadingMore}
+                            onClick={() => handleDiscoverSearch(undefined, discoverSource, discoverQuery, true)}
+                            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-2 transition disabled:opacity-50"
+                          >
+                            {discoverLoadingMore ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Loading more songs...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Load More Songs</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -7357,78 +7997,72 @@ export const App: React.FC = () => {
         </div>
       </main>
 
-      {/* 3. BOTTOM NAVIGATION (iOS-friendly stacked icon+label dock on mobile, pill dock on desktop) */}
+      {/* 3. UNIFIED BOTTOM NAVIGATION: Home, Lyrics, Library, Add, Queue */}
       <footer className="relative z-20 flex justify-center w-full">
         <nav
           className={`liquid-dock-nav flex items-center justify-between sm:justify-center w-full sm:w-auto gap-0.5 sm:gap-2 px-1.5 py-1.5 sm:px-3 sm:py-2 shadow-2xl ${glassClass}`}
         >
           {(() => {
             const currentDockKey =
-              activeView === 'lyrics'
+              activeView === 'home'
+                ? 'home'
+                : activeView === 'lyrics'
                 ? 'lyrics'
-                : activeView === 'stats'
-                ? 'stats'
-                : activeView === 'nowPlaying'
-                ? 'nowPlaying'
-                : queueTab === 'offline' && activeView === 'queue'
-                ? 'offline'
-                : queueTab === 'discover' && activeView === 'queue'
-                ? 'discover'
-                : 'queue';
+                : activeView === 'library'
+                ? 'library'
+                : activeView === 'add'
+                ? 'add'
+                : activeView === 'queue'
+                ? 'queue'
+                : 'home';
 
             const dockItems = [
               {
-                id: 'queue',
-                label: 'Queue',
-                icon: ListMusic,
-                onClick: () => {
-                  setActiveView('queue');
-                  if (queueTab === 'discover' || queueTab === 'offline') {
-                    setQueueTab('queue');
-                  }
-                },
-                hideLg: false,
-              },
-              {
-                id: 'nowPlaying',
-                label: 'Playing',
-                icon: Disc3,
-                onClick: () => setActiveView('nowPlaying'),
-                hideLg: true,
-              },
-              {
-                id: 'offline',
-                label: 'Offline',
-                icon: HardDriveDownload,
-                onClick: () => {
-                  setActiveView('queue');
-                  setQueueTab('offline');
-                },
-                hideLg: false,
-              },
-              {
-                id: 'discover',
-                label: 'Add',
-                icon: Compass,
-                onClick: () => {
-                  setActiveView('queue');
-                  setQueueTab('discover');
-                },
-                hideLg: false,
+                id: 'home',
+                label: 'Home',
+                icon: Home,
+                onClick: () => setActiveView('home'),
               },
               {
                 id: 'lyrics',
                 label: 'Lyrics',
                 icon: Mic2,
                 onClick: () => setActiveView('lyrics'),
-                hideLg: false,
               },
               {
-                id: 'stats',
-                label: 'Wrapped',
-                icon: Trophy,
-                onClick: () => setActiveView('stats'),
-                hideLg: false,
+                id: 'library',
+                label: 'Library',
+                icon: Library,
+                onClick: () => {
+                  setActiveView('library');
+                  setSelectedArtistName(null);
+                  if (librarySection === 'overview' || librarySection === 'offline') {
+                    setLibrarySection('offline');
+                    setQueueTab('offline');
+                  } else if (librarySection === 'liked') {
+                    setQueueTab('liked');
+                  } else if (librarySection === 'playlists') {
+                    setQueueTab('playlists');
+                  }
+                },
+              },
+              {
+                id: 'add',
+                label: 'Add',
+                icon: Compass,
+                onClick: () => {
+                  setActiveView('add');
+                  setQueueTab('discover');
+                },
+              },
+              {
+                id: 'queue',
+                label: 'Queue',
+                icon: ListMusic,
+                onClick: () => {
+                  setActiveView('queue');
+                  setQueueTab('queue');
+                },
               },
             ];
 
@@ -7440,8 +8074,8 @@ export const App: React.FC = () => {
                   key={item.id}
                   onClick={item.onClick}
                   className={`liquid-dock-item relative flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 flex-1 sm:flex-initial py-1.5 px-2 sm:px-3.5 sm:py-1.5 text-[10px] sm:text-xs font-semibold rounded-full transition-colors duration-200 select-none ${
-                    item.hideLg ? 'lg:hidden' : ''
-                  } ${isActive ? 'text-white' : 'opacity-70 hover:opacity-100 text-white'}`}
+                    isActive ? 'text-white' : 'opacity-70 hover:opacity-100 text-white'
+                  }`}
                 >
                   {isActive && (
                     <div
@@ -7658,9 +8292,9 @@ export const App: React.FC = () => {
                         desc: 'Frosted glass & 3D album color mesh',
                       },
                       {
-                        id: 'spotify',
-                        label: 'Spotify UI',
-                        desc: 'Matte dark cards & top-down cover wash',
+                        id: 'space',
+                        label: 'Meteor Shower / Space',
+                        desc: 'Twinkling stars & audio-reactive meteors',
                       },
                     ] as { id: UiStyleMode; label: string; desc: string }[]
                   ).map((st) => (
@@ -7679,28 +8313,6 @@ export const App: React.FC = () => {
                       <p className="text-[10px] opacity-75 mt-0.5">{st.desc}</p>
                     </button>
                   ))}
-                </div>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setTheme('dark')}
-                    style={theme === 'dark' ? dynamicAccentStyle : undefined}
-                    className={`py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
-                      theme === 'dark' ? '' : 'bg-white/10 opacity-75 hover:opacity-100'
-                    }`}
-                  >
-                    <Moon className="w-3.5 h-3.5" /> Dark Mode
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTheme('light')}
-                    style={theme === 'light' ? dynamicAccentStyle : undefined}
-                    className={`py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
-                      theme === 'light' ? '' : 'bg-white/10 opacity-75 hover:opacity-100'
-                    }`}
-                  >
-                    <Sun className="w-3.5 h-3.5" /> Light Mode
-                  </button>
                 </div>
               </div>
 
@@ -8393,7 +9005,38 @@ export const App: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto mt-3 space-y-1.5 pr-1">
+              <div className="flex-1 overflow-y-auto mt-3 space-y-2 pr-1">
+                {/* Matching Artists in Search */}
+                {spotlightMatchingArtists.length > 0 && (
+                  <div className="space-y-1.5 pb-2 border-b border-white/10">
+                    <p className="text-[10px] uppercase tracking-wider font-bold opacity-55 px-1">
+                      Artists
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {spotlightMatchingArtists.map((artist) => {
+                        const thumb = getSongThumbUrl(artist.sampleSong);
+                        return (
+                          <button
+                            key={`spot-artist-${artist.name}`}
+                            onClick={() => openArtistPage(artist.name)}
+                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-xs font-semibold transition"
+                          >
+                            <div className="w-5 h-5 rounded-full overflow-hidden bg-black/30 shrink-0 flex items-center justify-center">
+                              {thumb ? (
+                                <img src={thumb} alt={artist.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-3 h-3 opacity-70" />
+                              )}
+                            </div>
+                            <span className="truncate max-w-[140px]">{artist.name}</span>
+                            <span className="text-[10px] opacity-60">({artist.songs.length})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {spotlightResults.length === 0 ? (
                   <div className="py-10 text-center space-y-3">
                     <p className="text-xs opacity-65">
@@ -8414,7 +9057,7 @@ export const App: React.FC = () => {
                         onClick={() => {
                           const q = spotlightQuery;
                           setSpotlightOpen(false);
-                          setActiveView('queue');
+                          setActiveView('add');
                           setQueueTab('discover');
                           setDiscoverQuery(q);
                           handleDiscoverSearch(undefined, discoverSource, q);
@@ -8603,10 +9246,10 @@ export const App: React.FC = () => {
                   />
                 </div>
 
-                {/* Permanent UI Theme Selector */}
-                <div className="pt-1">
-                  <label className="block text-[11px] uppercase opacity-70 mb-1.5">
-                    Permanent UI Style
+                {/* Theme Selector & Quick Tools inside Settings */}
+                <div className="pt-1 space-y-2">
+                  <label className="block text-[11px] uppercase opacity-70">
+                    Theme Style
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -8619,19 +9262,41 @@ export const App: React.FC = () => {
                           : 'bg-black/25 border-white/10 opacity-75 hover:opacity-100'
                       }`}
                     >
-                      Liquid Glass (Default)
+                      Liquid (Default)
                     </button>
                     <button
                       type="button"
-                      onClick={() => setUiStyle('spotify')}
-                      style={uiStyle === 'spotify' ? dynamicAccentStyle : undefined}
+                      onClick={() => setUiStyle('space')}
+                      style={uiStyle === 'space' ? dynamicAccentStyle : undefined}
                       className={`py-2 px-3 rounded-xl text-xs font-semibold transition border ${
-                        uiStyle === 'spotify'
+                        uiStyle === 'space'
                           ? 'border-white/30'
                           : 'bg-black/25 border-white/10 opacity-75 hover:opacity-100'
                       }`}
                     >
-                      Spotify UI
+                      Meteor Shower / Space
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthModalOpen(false);
+                        setEqModalOpen(true);
+                      }}
+                      className="py-1.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Sliders className="w-3.5 h-3.5" /> EQ & Visualizer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthModalOpen(false);
+                        setDiscordModalOpen(true);
+                      }}
+                      className="py-1.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Gamepad2 className="w-3.5 h-3.5" /> Discord RPC
                     </button>
                   </div>
                 </div>

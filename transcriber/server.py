@@ -672,11 +672,12 @@ def get_spotify_anonymous_token(force_refresh: bool = False) -> str:
     return ""
 
 
-def search_spotify_catalog(q: str, limit: int = 15) -> list:
+def search_spotify_catalog(q: str, limit: int = 15, offset: int = 0) -> list:
     clean_q = (q or "").strip()
     if not clean_q:
         return []
     q_low = clean_q.lower()
+    safe_offset = max(0, int(offset or 0))
 
     # 1. Primary: Query REAL Spotify Catalog via Pathfinder searchDesktop API
     for attempt in range(2):
@@ -686,9 +687,9 @@ def search_spotify_catalog(q: str, limit: int = 15) -> list:
         try:
             variables = {
                 "searchTerm": clean_q,
-                "offset": 0,
-                "limit": max(25, limit * 2),
-                "numberOfTopResults": 5,
+                "offset": safe_offset,
+                "limit": max(20, limit * 2),
+                "numberOfTopResults": 5 if safe_offset == 0 else 0,
                 "includeAudiobooks": False,
                 "includeArtistHasConcertsField": False,
                 "includePreReleases": False,
@@ -1459,18 +1460,28 @@ def search_ytdlp_source(q: str, source: str, limit: int = 10) -> Tuple[bool, str
 async def discover_search(
     q: str = Query(..., min_length=1),
     source: str = Query("spotify"),
+    limit: int = Query(12, ge=1, le=50),
+    offset: int = Query(0, ge=0, le=200),
 ):
     loop = asyncio.get_running_loop()
     try:
         if source == "spotify" and not q.startswith("http"):
-            items = await loop.run_in_executor(None, search_spotify_catalog, q, 12)
-            return JSONResponse({"isPlaylist": False, "playlistName": "", "results": items})
+            items = await loop.run_in_executor(None, search_spotify_catalog, q, limit, offset)
+            return JSONResponse({"isPlaylist": False, "playlistName": "", "results": items, "offset": offset, "hasMore": len(items) >= min(6, limit)})
         else:
-            is_pl, pl_name, items = await loop.run_in_executor(
-                None, search_ytdlp_source, q, source, 10
+            fetch_count = max(10, offset + limit)
+            is_pl, pl_name, all_items = await loop.run_in_executor(
+                None, search_ytdlp_source, q, source, fetch_count
             )
+            sliced = all_items if is_pl else all_items[offset : offset + limit]
             return JSONResponse(
-                {"isPlaylist": is_pl, "playlistName": pl_name, "results": items}
+                {
+                    "isPlaylist": is_pl,
+                    "playlistName": pl_name,
+                    "results": sliced,
+                    "offset": offset,
+                    "hasMore": (not is_pl) and len(all_items) >= fetch_count,
+                }
             )
     except Exception as e:
         return JSONResponse(
@@ -3422,9 +3433,114 @@ async def list_wrapped_users():
     return JSONResponse({"status": "ok", "users": sorted([u for u in users if u])})
 
 
+def init_account_prefs_db():
+    WRAPPED_USERS_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(WRAPPED_SQLITE_PATH))
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_account_prefs (
+            username TEXT PRIMARY KEY,
+            folders_json TEXT DEFAULT '[]',
+            saved_artists_json TEXT DEFAULT '[]',
+            updated_at REAL DEFAULT 0
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def load_account_pref(username: str, field: str) -> list:
+    user_key = sanitize_username(username)
+    if not user_key:
+        return []
+    init_account_prefs_db()
+    col = "folders_json" if field == "folders" else "saved_artists_json"
+    try:
+        conn = sqlite3.connect(str(WRAPPED_SQLITE_PATH))
+        row = conn.execute(
+            f"SELECT {col} FROM user_account_prefs WHERE username = ?", (user_key,)
+        ).fetchone()
+        conn.close()
+        if row and row[0]:
+            parsed = json.loads(row[0])
+            if isinstance(parsed, list):
+                return parsed
+    except Exception:
+        pass
+    return []
+
+
+def save_account_pref(username: str, field: str, items: list) -> list:
+    user_key = sanitize_username(username)
+    if not user_key:
+        return items if isinstance(items, list) else []
+    init_account_prefs_db()
+    clean_items = items if isinstance(items, list) else []
+    raw = json.dumps(clean_items, ensure_ascii=False)
+    now = time.time()
+    conn = sqlite3.connect(str(WRAPPED_SQLITE_PATH))
+    existing = conn.execute(
+        "SELECT folders_json, saved_artists_json FROM user_account_prefs WHERE username = ?",
+        (user_key,),
+    ).fetchone()
+    if existing:
+        if field == "folders":
+            conn.execute(
+                "UPDATE user_account_prefs SET folders_json = ?, updated_at = ? WHERE username = ?",
+                (raw, now, user_key),
+            )
+        else:
+            conn.execute(
+                "UPDATE user_account_prefs SET saved_artists_json = ?, updated_at = ? WHERE username = ?",
+                (raw, now, user_key),
+            )
+    else:
+        folders_val = raw if field == "folders" else "[]"
+        artists_val = raw if field == "saved_artists" else "[]"
+        conn.execute(
+            "INSERT INTO user_account_prefs (username, folders_json, saved_artists_json, updated_at) VALUES (?, ?, ?, ?)",
+            (user_key, folders_val, artists_val, now),
+        )
+    conn.commit()
+    conn.close()
+    return clean_items
+
+
+@app.get("/api/user/folders/{username}")
+async def get_user_folders(username: str):
+    loop = asyncio.get_running_loop()
+    folders = await loop.run_in_executor(None, load_account_pref, username, "folders")
+    return JSONResponse({"status": "ok", "username": sanitize_username(username), "folders": folders})
+
+
+@app.post("/api/user/folders/{username}")
+async def post_user_folders(username: str, payload: Dict[str, Any] = Body(...)):
+    loop = asyncio.get_running_loop()
+    folders_in = payload.get("folders") if isinstance(payload.get("folders"), list) else []
+    saved = await loop.run_in_executor(None, save_account_pref, username, "folders", folders_in)
+    return JSONResponse({"status": "ok", "username": sanitize_username(username), "folders": saved})
+
+
+@app.get("/api/user/saved-artists/{username}")
+async def get_user_saved_artists(username: str):
+    loop = asyncio.get_running_loop()
+    artists = await loop.run_in_executor(None, load_account_pref, username, "saved_artists")
+    return JSONResponse({"status": "ok", "username": sanitize_username(username), "artists": artists})
+
+
+@app.post("/api/user/saved-artists/{username}")
+async def post_user_saved_artists(username: str, payload: Dict[str, Any] = Body(...)):
+    loop = asyncio.get_running_loop()
+    artists_in = payload.get("artists") if isinstance(payload.get("artists"), list) else []
+    saved = await loop.run_in_executor(None, save_account_pref, username, "saved_artists", artists_in)
+    return JSONResponse({"status": "ok", "username": sanitize_username(username), "artists": saved})
+
+
 @app.on_event("startup")
 async def startup_event():
     init_wrapped_db()
+    init_account_prefs_db()
     # Purge any old v1/v2 Whisper-only cached files so songs automatically upgrade to v3 Hybrid Exact Lyrics
     for f in CACHE_DIR.glob("*.json"):
         try:

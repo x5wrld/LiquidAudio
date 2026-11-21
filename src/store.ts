@@ -3,7 +3,7 @@ import { SubsonicClient, type SubsonicSong, type SubsonicPlaylist } from './subs
 import { db } from './db';
 import { listenAndTranscribeLyrics, type LyricResult } from './lyrics';
 
-export type ActiveView = 'nowPlaying' | 'queue' | 'lyrics' | 'stats';
+export type ActiveView = 'home' | 'lyrics' | 'library' | 'add' | 'queue' | 'stats';
 export type VisualizerMode = 'spectrum' | 'waveform' | 'mirror' | 'orb' | 'particles' | 'off';
 export type VisualizerBarAlign = 'center' | 'left' | 'right';
 export type StreamQuality = 'raw' | '320' | '192';
@@ -29,6 +29,7 @@ const VOLUME_STORAGE_KEY = 'liquid_audio_volume_v1';
 const WRAPPED_STORAGE_KEY = 'liquid_audio_wrapped_v1';
 const OFFLINE_PL_NAMES_KEY = 'liquid_audio_offline_playlists_v1';
 const PLAYLIST_FOLDERS_STORAGE_KEY = 'liquid_audio_playlist_folders_v1';
+const SAVED_ARTISTS_STORAGE_KEY = 'liquid_audio_saved_artists_v1';
 const DEFAULT_NAVIDROME_URL = String((import.meta as any).env?.VITE_DEFAULT_NAVIDROME_URL || '').trim();
 
 export interface PlaylistFolder {
@@ -38,9 +39,16 @@ export interface PlaylistFolder {
   createdAt: number;
 }
 
-function loadPlaylistFolders(): PlaylistFolder[] {
+function getScopedFolderKey(username?: string): string {
+  const clean = (username || '').trim().toLowerCase();
+  return clean ? `${PLAYLIST_FOLDERS_STORAGE_KEY}_${clean}` : PLAYLIST_FOLDERS_STORAGE_KEY;
+}
+
+function loadPlaylistFolders(username?: string): PlaylistFolder[] {
   try {
-    const raw = localStorage.getItem(PLAYLIST_FOLDERS_STORAGE_KEY);
+    const raw =
+      localStorage.getItem(getScopedFolderKey(username)) ||
+      localStorage.getItem(PLAYLIST_FOLDERS_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
@@ -59,11 +67,62 @@ function loadPlaylistFolders(): PlaylistFolder[] {
   return [];
 }
 
-function savePlaylistFolders(folders: PlaylistFolder[]) {
+function savePlaylistFolders(folders: PlaylistFolder[], username?: string) {
   try {
-    localStorage.setItem(PLAYLIST_FOLDERS_STORAGE_KEY, JSON.stringify(folders));
+    const payload = JSON.stringify(folders);
+    localStorage.setItem(PLAYLIST_FOLDERS_STORAGE_KEY, payload);
+    if (username && username.trim()) {
+      localStorage.setItem(getScopedFolderKey(username), payload);
+    }
   } catch {
     // ignore
+  }
+}
+
+function getScopedSavedArtistsKey(username?: string): string {
+  const clean = (username || '').trim().toLowerCase();
+  return clean ? `${SAVED_ARTISTS_STORAGE_KEY}_${clean}` : SAVED_ARTISTS_STORAGE_KEY;
+}
+
+function loadSavedArtists(username?: string): string[] {
+  try {
+    const raw =
+      localStorage.getItem(getScopedSavedArtistsKey(username)) ||
+      localStorage.getItem(SAVED_ARTISTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return Array.from(new Set(parsed.filter((a) => typeof a === 'string' && a.trim()).map((a) => a.trim())));
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveSavedArtists(artists: string[], username?: string) {
+  try {
+    const payload = JSON.stringify(artists);
+    localStorage.setItem(SAVED_ARTISTS_STORAGE_KEY, payload);
+    if (username && username.trim()) {
+      localStorage.setItem(getScopedSavedArtistsKey(username), payload);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function pushAccountPrefToServer(username: string, endpoint: 'folders' | 'saved-artists', body: Record<string, unknown>) {
+  const cleanUser = (username || '').trim();
+  if (!cleanUser) return;
+  try {
+    await fetch(`/api/user/${endpoint}/${encodeURIComponent(cleanUser)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // offline fallback already persisted in localStorage
   }
 }
 
@@ -481,7 +540,7 @@ const initialIndex =
       )
     : -1;
 
-export type UiStyleMode = 'liquid' | 'spotify';
+export type UiStyleMode = 'liquid' | 'space';
 
 interface PlayerState {
   // Theme & UI
@@ -526,11 +585,12 @@ interface PlayerState {
   error: string | null;
   client: SubsonicClient | null;
 
-  // Library, Liked Songs, Playlists & Offline Downloads (with Offline Playlists)
+  // Library, Liked Songs, Playlists, Saved Artists & Offline Downloads
   librarySongs: SubsonicSong[];
   starredSongs: SubsonicSong[];
   playlists: SubsonicPlaylist[];
   playlistFolders: PlaylistFolder[];
+  savedArtists: string[];
   selectedPlaylist: SubsonicPlaylist | null;
   offlineSongs: SubsonicSong[];
   offlinePlaylists: string[];
@@ -611,6 +671,10 @@ interface PlayerState {
   renamePlaylistFolder: (folderId: string, newName: string) => void;
   deletePlaylistFolder: (folderId: string) => void;
   assignPlaylistToFolder: (playlistId: string, folderId: string | null) => void;
+  syncAccountPrefsFromServer: (username?: string) => Promise<void>;
+  toggleSaveArtist: (artistName: string) => void;
+  copyPublicPlaylistToMine: (playlistId: string) => Promise<SubsonicPlaylist | null>;
+  removeMultipleSongsFromPlaylist: (playlistId: string, songIndices: number[]) => Promise<void>;
   addSongToPlaylist: (playlistId: string, songId: string) => Promise<void>;
   addSongsToPlaylist: (playlistId: string, songIds: string[]) => Promise<void>;
   removeSongFromPlaylist: (playlistId: string, songIndex: number) => Promise<void>;
@@ -703,18 +767,17 @@ export function reorderArrayWithGroup<T>(
   return { nextItems, newIndices };
 }
 
-const initialTheme: 'dark' | 'light' =
-  initialFx?.theme === 'light' ? 'light' : 'dark';
+const initialTheme: 'dark' | 'light' = 'dark';
 const initialUiStyle: UiStyleMode =
-  initialFx?.uiStyle === 'spotify' ? 'spotify' : 'liquid';
+  initialFx?.uiStyle === 'space' ? 'space' : 'liquid';
 if (typeof document !== 'undefined') {
-  document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+  document.documentElement.classList.add('dark');
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   theme: initialTheme,
   uiStyle: initialUiStyle,
-  activeView: 'nowPlaying',
+  activeView: 'home',
   visualizerMode: initialFx?.visualizerMode || 'spectrum',
   visualizerBarAlign: initialFx?.visualizerBarAlign || 'center',
   streamQuality: initialFx?.streamQuality || 'raw',
@@ -751,7 +814,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   librarySongs: initialCache.librarySongs,
   starredSongs: (initialCache.librarySongs || []).filter((s) => Boolean(s.starred)),
   playlists: initialCache.playlists,
-  playlistFolders: loadPlaylistFolders(),
+  playlistFolders: loadPlaylistFolders(initialCreds?.username),
+  savedArtists: loadSavedArtists(initialCreds?.username),
   selectedPlaylist: null,
   offlineSongs: [],
   offlinePlaylists: loadOfflinePlaylistNames(),
@@ -781,22 +845,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentLyrics: null,
   lyricsLoading: false,
 
-  setTheme: (theme) => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    set({ theme });
-    saveStoredFx({ ...loadStoredFx(), theme });
+  setTheme: () => {
+    document.documentElement.classList.add('dark');
+    set({ theme: 'dark' });
+    saveStoredFx({ ...loadStoredFx(), theme: 'dark' });
   },
 
   toggleTheme: () => {
-    const next = get().theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.classList.toggle('dark', next === 'dark');
-    set({ theme: next });
-    saveStoredFx({ ...loadStoredFx(), theme: next });
+    const nextStyle: UiStyleMode = get().uiStyle === 'liquid' ? 'space' : 'liquid';
+    set({ uiStyle: nextStyle, theme: 'dark' });
+    saveStoredFx({ ...loadStoredFx(), uiStyle: nextStyle, theme: 'dark' });
   },
 
   setUiStyle: (uiStyle) => {
-    set({ uiStyle });
-    saveStoredFx({ ...loadStoredFx(), uiStyle });
+    set({ uiStyle, theme: 'dark' });
+    saveStoredFx({ ...loadStoredFx(), uiStyle, theme: 'dark' });
   },
 
   setShareServerConfig: (shareServerUrl, shareApiToken) => {
@@ -1445,8 +1508,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         listeningStats: userStats,
       });
 
-      // Sync Wrapped stats with the user's account database on the local server
+      // Sync Wrapped stats + Account Playlist Folders & Saved Artists with the server
       get().syncWrappedWithServer();
+      get().syncAccountPrefsFromServer(cleanUser);
 
       if (nextCurrentSong && !get().currentLyrics) {
         get().loadLyricsForSong(nextCurrentSong);
@@ -1755,18 +1819,60 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ selectedPlaylist: null });
     }
     // Remove deleted playlist from any playlist folders
+    const user = get().username;
     const cleanedFolders = get().playlistFolders.map((f) => ({
       ...f,
       playlistIds: f.playlistIds.filter((pid) => pid !== id),
     }));
-    savePlaylistFolders(cleanedFolders);
+    savePlaylistFolders(cleanedFolders, user);
     set({ playlistFolders: cleanedFolders });
+    pushAccountPrefToServer(user, 'folders', { folders: cleanedFolders });
     await get().loadPlaylists();
+  },
+
+  syncAccountPrefsFromServer: async (explicitUser?: string) => {
+    const cleanUser = (explicitUser || get().username || '').trim();
+    if (!cleanUser) return;
+    // Load local account-scoped copy immediately
+    const localFolders = loadPlaylistFolders(cleanUser);
+    const localArtists = loadSavedArtists(cleanUser);
+    try {
+      const [fRes, aRes] = await Promise.all([
+        fetch(`/api/user/folders/${encodeURIComponent(cleanUser)}`).catch(() => null),
+        fetch(`/api/user/saved-artists/${encodeURIComponent(cleanUser)}`).catch(() => null),
+      ]);
+      if (fRes && fRes.ok) {
+        const fData = await fRes.json();
+        const serverFolders: PlaylistFolder[] = Array.isArray(fData?.folders) ? fData.folders : [];
+        if (serverFolders.length > 0) {
+          savePlaylistFolders(serverFolders, cleanUser);
+          set({ playlistFolders: serverFolders });
+        } else if (localFolders.length > 0) {
+          // Seed server with existing local folders on first sync
+          set({ playlistFolders: localFolders });
+          pushAccountPrefToServer(cleanUser, 'folders', { folders: localFolders });
+        }
+      }
+      if (aRes && aRes.ok) {
+        const aData = await aRes.json();
+        const serverArtists: string[] = Array.isArray(aData?.artists) ? aData.artists : [];
+        if (serverArtists.length > 0) {
+          saveSavedArtists(serverArtists, cleanUser);
+          set({ savedArtists: serverArtists });
+        } else if (localArtists.length > 0) {
+          set({ savedArtists: localArtists });
+          pushAccountPrefToServer(cleanUser, 'saved-artists', { artists: localArtists });
+        }
+      }
+    } catch {
+      // keep localStorage copy if offline
+    }
   },
 
   createPlaylistFolder: (name) => {
     const trimmed = name.trim();
     if (!trimmed) return null;
+    const user = get().username;
     const newFolder: PlaylistFolder = {
       id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: trimmed,
@@ -1774,28 +1880,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       createdAt: Date.now(),
     };
     const next = [...get().playlistFolders, newFolder];
-    savePlaylistFolders(next);
+    savePlaylistFolders(next, user);
     set({ playlistFolders: next });
+    pushAccountPrefToServer(user, 'folders', { folders: next });
     return newFolder;
   },
 
   renamePlaylistFolder: (folderId, newName) => {
     const trimmed = newName.trim();
     if (!trimmed) return;
+    const user = get().username;
     const next = get().playlistFolders.map((f) =>
       f.id === folderId ? { ...f, name: trimmed } : f
     );
-    savePlaylistFolders(next);
+    savePlaylistFolders(next, user);
     set({ playlistFolders: next });
+    pushAccountPrefToServer(user, 'folders', { folders: next });
   },
 
   deletePlaylistFolder: (folderId) => {
+    const user = get().username;
     const next = get().playlistFolders.filter((f) => f.id !== folderId);
-    savePlaylistFolders(next);
+    savePlaylistFolders(next, user);
     set({ playlistFolders: next });
+    pushAccountPrefToServer(user, 'folders', { folders: next });
   },
 
   assignPlaylistToFolder: (playlistId, folderId) => {
+    const user = get().username;
     const next = get().playlistFolders.map((f) => {
       const without = f.playlistIds.filter((pid) => pid !== playlistId);
       if (folderId && f.id === folderId) {
@@ -1803,8 +1915,49 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       return { ...f, playlistIds: without };
     });
-    savePlaylistFolders(next);
+    savePlaylistFolders(next, user);
     set({ playlistFolders: next });
+    pushAccountPrefToServer(user, 'folders', { folders: next });
+  },
+
+  toggleSaveArtist: (artistName) => {
+    const trimmed = (artistName || '').trim();
+    if (!trimmed) return;
+    const user = get().username;
+    const cur = get().savedArtists;
+    const exists = cur.some((a) => a.toLowerCase() === trimmed.toLowerCase());
+    const next = exists
+      ? cur.filter((a) => a.toLowerCase() !== trimmed.toLowerCase())
+      : [...cur, trimmed];
+    saveSavedArtists(next, user);
+    set({ savedArtists: next });
+    pushAccountPrefToServer(user, 'saved-artists', { artists: next });
+  },
+
+  copyPublicPlaylistToMine: async (playlistId) => {
+    const { client } = get();
+    if (!client) return null;
+    try {
+      const fullPl = await client.getPlaylist(playlistId);
+      if (!fullPl) return null;
+      const songIds = (fullPl.entry || []).map((s) => s.id).filter(Boolean);
+      const created = await client.createPlaylist(fullPl.name, songIds);
+      await get().loadPlaylists();
+      return created;
+    } catch {
+      return null;
+    }
+  },
+
+  removeMultipleSongsFromPlaylist: async (playlistId, songIndices) => {
+    const { client, selectedPlaylist } = get();
+    if (!client || songIndices.length === 0) return;
+    const uniqueSorted = Array.from(new Set(songIndices)).sort((a, b) => b - a);
+    await client.updatePlaylist(playlistId, [], uniqueSorted);
+    await get().loadPlaylists();
+    if (selectedPlaylist?.id === playlistId) {
+      await get().selectPlaylist(playlistId);
+    }
   },
 
   addSongToPlaylist: async (playlistId, songId) => {

@@ -7,7 +7,9 @@ A modern, self-hosted **Navidrome / Subsonic** Progressive Web App (PWA) built w
 ## Key Features (BUILD V1)
 
 ### UI & Visuals
-- **Two Permanent UI Styles**: Switch between **Liquid Glass** (default) and a clean **Spotify-inspired UI** (`Dark` & `Light` themes persisted automatically).
+- **Two Full Themes with Unified Navigation**: Switch between **Liquid (Default)** and **Meteor Shower / Space** — a dark deep-space theme with faintly twinkling stars and an always-on audio-reactive meteor shower visualizer colored dynamically from the active song's cover art.
+- **Unified Navigation Layout**: Top bar with Liquid Audio + Navidrome connection status, central Song & Artist search, and quick actions (Mini-Player, Listen Along, Wrapped, Settings); bottom bar with **Home**, **Lyrics**, **Library**, **Add**, and **Queue**.
+- **Home Discovery Dashboard**: Side-by-side Now Playing view with **Public Playlists** (with one-click "+ Save" to Your Playlists), **Recently Played**, and **Random Songs**.
 - **Accurate Album-Reactive Backgrounds**: 12-hue vibrancy-weighted HSL color extraction with automatic luminance calibration — dark/black covers render deep obsidian backgrounds, while white/bright covers use a softened anti-glare pearl aesthetic.
 - **Liquid Splash Song Transitions**: Organic shockwave rings, splashing droplets, and cover-art ripple/caustic waves on every track change or skip.
 - **60fps Audio Visualizer**: Real-time Web Audio spectrum, waveform, mirror, orb, and particle visualizers reactive to the active track's cover palette.
@@ -20,8 +22,12 @@ A modern, self-hosted **Navidrome / Subsonic** Progressive Web App (PWA) built w
 - **iOS & Android Lock Screen / Dynamic Island Integration**: MediaSession metadata, cover art, progress syncing, and iOS background keep-alive handling for reliable lock screen play/pause/skip controls.
 
 ### Library, Playlists & Social
-- **Playlist Folders**: Create, rename, and delete folders to organize your Navidrome playlists with one-click assignment (deleting a folder keeps all playlists intact).
-- **Liked Songs Tab & Queue Search**: Dedicated Liked Songs view, instant Queue filtering, drag-and-drop reordering, and full library search.
+- **Account-Synced Playlist Folders**: Create, rename, and delete folders to organize your Navidrome playlists — persisted automatically to your account on the backend (SQLite) and locally so they stay synced across refreshes and devices.
+- **Public Playlists → Your Playlists**: Copy any public playlist directly into your own Navidrome playlists in one click.
+- **Artist Search & Saved Artists**: Search for artists directly in the search bar, click any artist to view all of their tracks, and save favorite artists to **Library → Saved Artists**.
+- **Clean Playlist Controls**: Dedicated **Offline All** (Download All), **Play All**, and **+ Queue All** actions at the top of playlists; per-track drag handles, multi-select batch delete/queue, quick Add to Queue button, and a clean `...` dropdown for Download, Share, Move, and Delete.
+- **Queue Management**: Live queue search, drag-and-drop reordering, multi-select batch removal, and clear queue.
+- **Add / Discover with Pagination**: Search Spotify & SoundCloud catalogs with **Load More Songs** pagination to browse additional results.
 - **Synced Lyrics**: Automatic LRC lookup with liquid word-sweep animations and contrast-adaptive lyric colors that remain readable on any cover art.
 - **Listen Along**: Real-time session syncing so friends connected to the same instance can listen together.
 - **Liquid Wrapped**: Personal listening statistics, streaks, top tracks/artists, and exportable story cards.
