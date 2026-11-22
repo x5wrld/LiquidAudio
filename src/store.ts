@@ -2,8 +2,14 @@ import { create } from 'zustand';
 import { SubsonicClient, type SubsonicSong, type SubsonicPlaylist } from './subsonic';
 import { db } from './db';
 import { listenAndTranscribeLyrics, type LyricResult } from './lyrics';
+import {
+  VALID_UI_STYLES,
+  type UiStyleMode,
+  type ThemeCycleMode,
+} from './themesCatalog';
+export type { UiStyleMode, ThemeCycleMode };
 
-export type ActiveView = 'home' | 'lyrics' | 'library' | 'add' | 'queue' | 'stats';
+export type ActiveView = 'home' | 'lyrics' | 'library' | 'add' | 'queue' | 'stats' | 'themes';
 export type VisualizerMode = 'spectrum' | 'waveform' | 'mirror' | 'orb' | 'particles' | 'off';
 export type VisualizerBarAlign = 'center' | 'left' | 'right';
 export type StreamQuality = 'raw' | '320' | '192';
@@ -112,7 +118,48 @@ function saveSavedArtists(artists: string[], username?: string) {
   }
 }
 
-async function pushAccountPrefToServer(username: string, endpoint: 'folders' | 'saved-artists', body: Record<string, unknown>) {
+const FAVORITE_THEMES_STORAGE_KEY = 'liquid_audio_favorite_themes_v1';
+
+function getScopedFavoriteThemesKey(username?: string): string {
+  const clean = (username || '').trim().toLowerCase();
+  return clean ? `${FAVORITE_THEMES_STORAGE_KEY}_${clean}` : FAVORITE_THEMES_STORAGE_KEY;
+}
+
+function loadFavoriteThemes(username?: string): UiStyleMode[] | null {
+  try {
+    const raw =
+      localStorage.getItem(getScopedFavoriteThemesKey(username)) ||
+      localStorage.getItem(FAVORITE_THEMES_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return Array.from(
+        new Set(parsed.filter((id) => typeof id === 'string' && VALID_UI_STYLES.includes(id as UiStyleMode)))
+      ) as UiStyleMode[];
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveFavoriteThemes(themes: UiStyleMode[], username?: string) {
+  try {
+    const payload = JSON.stringify(themes);
+    localStorage.setItem(FAVORITE_THEMES_STORAGE_KEY, payload);
+    if (username && username.trim()) {
+      localStorage.setItem(getScopedFavoriteThemesKey(username), payload);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function pushAccountPrefToServer(
+  username: string,
+  endpoint: 'folders' | 'saved-artists' | 'favorite-themes',
+  body: Record<string, unknown>
+) {
   const cleanUser = (username || '').trim();
   if (!cleanUser) return;
   try {
@@ -540,26 +587,14 @@ const initialIndex =
       )
     : -1;
 
-export type UiStyleMode =
-  | 'liquid'
-  | 'space'
-  | 'thunder'
-  | 'undersea'
-  | 'lava'
-  | 'nature'
-  | 'rain'
-  | 'synthwave'
-  | 'eclipse'
-  | 'nebula'
-  | 'aurora'
-  | 'bioluminescent'
-  | 'snowfall'
-  | 'blackhole';
+// UiStyleMode imported from ./themesCatalog
 
 interface PlayerState {
   // Theme & UI
   theme: 'dark' | 'light';
   uiStyle: UiStyleMode;
+  favoriteThemes: UiStyleMode[];
+  themeCycleMode: ThemeCycleMode;
   activeView: ActiveView;
   visualizerMode: VisualizerMode;
   visualizerBarAlign: VisualizerBarAlign;
@@ -643,6 +678,10 @@ interface PlayerState {
   setTheme: (theme: 'dark' | 'light') => void;
   toggleTheme: () => void;
   setUiStyle: (style: UiStyleMode) => void;
+  toggleFavoriteTheme: (style: UiStyleMode) => void;
+  setThemeCycleMode: (mode: ThemeCycleMode) => void;
+  advanceThemeForSong: () => void;
+  shuffleThemeNow: (onlyFavorites?: boolean) => void;
   setShareServerConfig: (url: string, token: string) => void;
   setActiveView: (view: ActiveView) => void;
   setVisualizerMode: (mode: VisualizerMode) => void;
@@ -789,27 +828,23 @@ export function reorderArrayWithGroup<T>(
   return { nextItems, newIndices };
 }
 
-const VALID_UI_STYLES: UiStyleMode[] = [
-  'liquid',
-  'space',
-  'thunder',
-  'undersea',
-  'lava',
-  'nature',
-  'rain',
-  'synthwave',
-  'eclipse',
-  'nebula',
-  'aurora',
-  'bioluminescent',
-  'snowfall',
-  'blackhole',
-];
 const initialTheme: 'dark' | 'light' = 'dark';
 const initialUiStyle: UiStyleMode =
   initialFx?.uiStyle && VALID_UI_STYLES.includes(initialFx.uiStyle as UiStyleMode)
     ? (initialFx.uiStyle as UiStyleMode)
     : 'liquid';
+const scopedInitialFavoriteThemes = loadFavoriteThemes(initialCreds?.username);
+const initialFavoriteThemes: UiStyleMode[] = scopedInitialFavoriteThemes
+  ? scopedInitialFavoriteThemes
+  : Array.isArray(initialFx?.favoriteThemes)
+  ? (initialFx.favoriteThemes.filter((id: any) => VALID_UI_STYLES.includes(id)) as UiStyleMode[])
+  : ['liquid', 'space', 'thunder', 'aurora', 'synthwave'];
+const initialThemeCycleMode: ThemeCycleMode =
+  initialFx?.themeCycleMode === 'random_all' ||
+  initialFx?.themeCycleMode === 'fav_random' ||
+  initialFx?.themeCycleMode === 'fav_loop'
+    ? initialFx.themeCycleMode
+    : 'off';
 if (typeof document !== 'undefined') {
   document.documentElement.classList.add('dark');
 }
@@ -817,6 +852,8 @@ if (typeof document !== 'undefined') {
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   theme: initialTheme,
   uiStyle: initialUiStyle,
+  favoriteThemes: initialFavoriteThemes,
+  themeCycleMode: initialThemeCycleMode,
   activeView: 'home',
   visualizerMode: initialFx?.visualizerMode || 'spectrum',
   visualizerBarAlign: initialFx?.visualizerBarAlign || 'center',
@@ -918,6 +955,51 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setUiStyle: (uiStyle) => {
     set({ uiStyle, theme: 'dark' });
     saveStoredFx({ ...loadStoredFx(), uiStyle, theme: 'dark' });
+  },
+
+  toggleFavoriteTheme: (style) => {
+    const user = get().username;
+    const cur = get().favoriteThemes;
+    const exists = cur.includes(style);
+    const next = exists ? cur.filter((id) => id !== style) : [...cur, style];
+    set({ favoriteThemes: next });
+    saveFavoriteThemes(next, user);
+    saveStoredFx({ ...loadStoredFx(), favoriteThemes: next });
+    pushAccountPrefToServer(user, 'favorite-themes', { themes: next });
+  },
+
+  setThemeCycleMode: (themeCycleMode) => {
+    set({ themeCycleMode });
+    saveStoredFx({ ...loadStoredFx(), themeCycleMode });
+  },
+
+  shuffleThemeNow: (onlyFavorites = false) => {
+    const { favoriteThemes, uiStyle } = get();
+    const pool = onlyFavorites && favoriteThemes.length > 0 ? favoriteThemes : VALID_UI_STYLES;
+    const candidates = pool.length > 1 ? pool.filter((id) => id !== uiStyle) : pool;
+    const picked = candidates[Math.floor(Math.random() * candidates.length)] || 'liquid';
+    set({ uiStyle: picked, theme: 'dark' });
+    saveStoredFx({ ...loadStoredFx(), uiStyle: picked, theme: 'dark' });
+  },
+
+  advanceThemeForSong: () => {
+    const { themeCycleMode, favoriteThemes, uiStyle } = get();
+    if (themeCycleMode === 'off') return;
+    if (themeCycleMode === 'random_all') {
+      get().shuffleThemeNow(false);
+      return;
+    }
+    const favs = favoriteThemes.length > 0 ? favoriteThemes : VALID_UI_STYLES;
+    if (themeCycleMode === 'fav_random') {
+      get().shuffleThemeNow(true);
+      return;
+    }
+    if (themeCycleMode === 'fav_loop') {
+      const idx = favs.indexOf(uiStyle);
+      const next = favs[(idx + 1) % favs.length] || favs[0];
+      set({ uiStyle: next, theme: 'dark' });
+      saveStoredFx({ ...loadStoredFx(), uiStyle: next, theme: 'dark' });
+    }
   },
 
   setVisualizerSpeed: (speed) => {
@@ -1922,10 +2004,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Load local account-scoped copy immediately
     const localFolders = loadPlaylistFolders(cleanUser);
     const localArtists = loadSavedArtists(cleanUser);
+    const localThemes = loadFavoriteThemes(cleanUser) || get().favoriteThemes;
     try {
-      const [fRes, aRes] = await Promise.all([
+      const [fRes, aRes, tRes] = await Promise.all([
         fetch(`/api/user/folders/${encodeURIComponent(cleanUser)}`).catch(() => null),
         fetch(`/api/user/saved-artists/${encodeURIComponent(cleanUser)}`).catch(() => null),
+        fetch(`/api/user/favorite-themes/${encodeURIComponent(cleanUser)}`).catch(() => null),
       ]);
       if (fRes && fRes.ok) {
         const fData = await fRes.json();
@@ -1948,6 +2032,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         } else if (localArtists.length > 0) {
           set({ savedArtists: localArtists });
           pushAccountPrefToServer(cleanUser, 'saved-artists', { artists: localArtists });
+        }
+      }
+      if (tRes && tRes.ok) {
+        const tData = await tRes.json();
+        const serverThemes: UiStyleMode[] = Array.isArray(tData?.themes)
+          ? (tData.themes.filter((id: any) => VALID_UI_STYLES.includes(id)) as UiStyleMode[])
+          : [];
+        if (serverThemes.length > 0) {
+          saveFavoriteThemes(serverThemes, cleanUser);
+          saveStoredFx({ ...loadStoredFx(), favoriteThemes: serverThemes });
+          set({ favoriteThemes: serverThemes });
+        } else if (localThemes.length > 0) {
+          saveFavoriteThemes(localThemes, cleanUser);
+          set({ favoriteThemes: localThemes });
+          pushAccountPrefToServer(cleanUser, 'favorite-themes', { themes: localThemes });
         }
       }
     } catch {

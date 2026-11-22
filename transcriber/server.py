@@ -3442,20 +3442,32 @@ def init_account_prefs_db():
             username TEXT PRIMARY KEY,
             folders_json TEXT DEFAULT '[]',
             saved_artists_json TEXT DEFAULT '[]',
+            favorite_themes_json TEXT DEFAULT '[]',
             updated_at REAL DEFAULT 0
         )
         """
     )
+    try:
+        conn.execute("ALTER TABLE user_account_prefs ADD COLUMN favorite_themes_json TEXT DEFAULT '[]'")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
 
+ACCOUNT_PREF_COLS = {
+    "folders": "folders_json",
+    "saved_artists": "saved_artists_json",
+    "favorite_themes": "favorite_themes_json",
+}
+
+
 def load_account_pref(username: str, field: str) -> list:
     user_key = sanitize_username(username)
-    if not user_key:
+    col = ACCOUNT_PREF_COLS.get(field)
+    if not user_key or not col:
         return []
     init_account_prefs_db()
-    col = "folders_json" if field == "folders" else "saved_artists_json"
     try:
         conn = sqlite3.connect(str(WRAPPED_SQLITE_PATH))
         row = conn.execute(
@@ -3473,7 +3485,8 @@ def load_account_pref(username: str, field: str) -> list:
 
 def save_account_pref(username: str, field: str, items: list) -> list:
     user_key = sanitize_username(username)
-    if not user_key:
+    col = ACCOUNT_PREF_COLS.get(field)
+    if not user_key or not col:
         return items if isinstance(items, list) else []
     init_account_prefs_db()
     clean_items = items if isinstance(items, list) else []
@@ -3481,26 +3494,21 @@ def save_account_pref(username: str, field: str, items: list) -> list:
     now = time.time()
     conn = sqlite3.connect(str(WRAPPED_SQLITE_PATH))
     existing = conn.execute(
-        "SELECT folders_json, saved_artists_json FROM user_account_prefs WHERE username = ?",
+        "SELECT 1 FROM user_account_prefs WHERE username = ?",
         (user_key,),
     ).fetchone()
     if existing:
-        if field == "folders":
-            conn.execute(
-                "UPDATE user_account_prefs SET folders_json = ?, updated_at = ? WHERE username = ?",
-                (raw, now, user_key),
-            )
-        else:
-            conn.execute(
-                "UPDATE user_account_prefs SET saved_artists_json = ?, updated_at = ? WHERE username = ?",
-                (raw, now, user_key),
-            )
+        conn.execute(
+            f"UPDATE user_account_prefs SET {col} = ?, updated_at = ? WHERE username = ?",
+            (raw, now, user_key),
+        )
     else:
         folders_val = raw if field == "folders" else "[]"
         artists_val = raw if field == "saved_artists" else "[]"
+        themes_val = raw if field == "favorite_themes" else "[]"
         conn.execute(
-            "INSERT INTO user_account_prefs (username, folders_json, saved_artists_json, updated_at) VALUES (?, ?, ?, ?)",
-            (user_key, folders_val, artists_val, now),
+            "INSERT INTO user_account_prefs (username, folders_json, saved_artists_json, favorite_themes_json, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (user_key, folders_val, artists_val, themes_val, now),
         )
     conn.commit()
     conn.close()
@@ -3535,6 +3543,29 @@ async def post_user_saved_artists(username: str, payload: Dict[str, Any] = Body(
     artists_in = payload.get("artists") if isinstance(payload.get("artists"), list) else []
     saved = await loop.run_in_executor(None, save_account_pref, username, "saved_artists", artists_in)
     return JSONResponse({"status": "ok", "username": sanitize_username(username), "artists": saved})
+
+
+@app.get("/api/user/favorite-themes/{username}")
+async def get_user_favorite_themes(username: str):
+    loop = asyncio.get_running_loop()
+    themes = await loop.run_in_executor(None, load_account_pref, username, "favorite_themes")
+    return JSONResponse({"status": "ok", "username": sanitize_username(username), "themes": themes})
+
+
+@app.post("/api/user/favorite-themes/{username}")
+async def post_user_favorite_themes(username: str, payload: Dict[str, Any] = Body(...)):
+    loop = asyncio.get_running_loop()
+    raw_themes = payload.get("themes") if isinstance(payload.get("themes"), list) else []
+    clean_themes = []
+    seen = set()
+    for t in raw_themes[:150]:
+        if isinstance(t, str):
+            val = t.strip()
+            if val and len(val) <= 48 and re.fullmatch(r"[a-zA-Z0-9_-]+", val) and val not in seen:
+                seen.add(val)
+                clean_themes.append(val)
+    saved = await loop.run_in_executor(None, save_account_pref, username, "favorite_themes", clean_themes)
+    return JSONResponse({"status": "ok", "username": sanitize_username(username), "themes": saved})
 
 
 @app.on_event("startup")

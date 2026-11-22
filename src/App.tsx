@@ -76,6 +76,13 @@ import {
 } from 'lucide-react';
 import { ThemeBackgroundCanvas } from './ThemeBackgroundCanvas';
 import {
+  THEME_CATALOG,
+  THEME_BY_ID,
+  THEME_CATEGORIES,
+  type ThemeCategory,
+  type ThemeCycleMode,
+} from './themesCatalog';
+import {
   usePlayerStore,
   EQ_LABELS,
   EQ_PRESETS,
@@ -796,6 +803,12 @@ export const App: React.FC = () => {
     toggleTheme,
     uiStyle,
     setUiStyle,
+    favoriteThemes,
+    themeCycleMode,
+    toggleFavoriteTheme,
+    setThemeCycleMode,
+    advanceThemeForSong,
+    shuffleThemeNow,
     shareServerUrl,
     shareApiToken,
     setShareServerConfig,
@@ -981,6 +994,11 @@ export const App: React.FC = () => {
     }
   });
   const [selectedQueueIndices, setSelectedQueueIndices] = useState<number[]>([]);
+  const [themeSearchQuery, setThemeSearchQuery] = useState<string>('');
+  const [themeCategoryFilter, setThemeCategoryFilter] = useState<'All' | 'Favourites' | ThemeCategory>('All');
+  const [artistSearchQuery, setArtistSearchQuery] = useState<string>('');
+  const [visualizerFocusMode, setVisualizerFocusMode] = useState<boolean>(false);
+  const prevSongIdForThemeRef = useRef<string | null>(null);
   const [extractedPalette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const palette: Palette = useMemo(() => {
     if (!staticColorEnabled) return extractedPalette;
@@ -2431,106 +2449,76 @@ export const App: React.FC = () => {
     };
   }, [listeningStats, compareStats]);
 
-  const THEME_OPTIONS: { id: UiStyleMode; label: string; desc: string }[] = [
-    { id: 'liquid', label: 'Liquid Glass (Default)', desc: 'Frosted glass & 3D album color mesh' },
-    { id: 'space', label: 'Meteor Shower / Space', desc: 'Twinkling stars & glowing audio meteors' },
-    { id: 'thunder', label: 'Thunder & Lightning', desc: 'Top storm clouds & beat-synced bolts' },
-    { id: 'undersea', label: 'Water / Undersea', desc: 'Caustic sunbeams, bubbles & plankton' },
-    { id: 'lava', label: 'Lava Lamp', desc: 'Floating molten wax blobs in song colors' },
-    { id: 'nature', label: 'Nature', desc: 'Forest canopy, fireflies & drifting leaves' },
-    { id: 'rain', label: 'Rain on Glass', desc: 'Window droplets, wet trails & soft bokeh' },
-    { id: 'synthwave', label: 'Synthwave', desc: 'Retro segmented sun & scrolling neon grid' },
-    { id: 'eclipse', label: 'Solar Eclipse', desc: 'Dark lunar disc with blazing solar corona' },
-    { id: 'nebula', label: 'Nebula', desc: 'Swirling deep-space cosmic gas & star clusters' },
-    { id: 'aurora', label: 'Aurora Borealis', desc: 'Flowing Northern Lights curtains in the night sky' },
-    { id: 'bioluminescent', label: 'Bioluminescent', desc: 'Glowing deep-sea jellyfish & luminous spores' },
-    { id: 'snowfall', label: 'Snowfall', desc: 'Multi-depth drifting snowflakes & frost glow' },
-    { id: 'blackhole', label: 'Blackhole', desc: 'Event horizon, photon ring & accretion disk' },
-  ];
+  const THEME_OPTIONS = THEME_CATALOG;
+  const activeThemeMeta = THEME_BY_ID[uiStyle] || THEME_BY_ID.liquid;
+
+  // Auto-advance theme on each song change when Random / Favourites Loop mode is enabled
+  useEffect(() => {
+    const songId = currentSong?.id || null;
+    if (!songId) return;
+    if (prevSongIdForThemeRef.current === null) {
+      prevSongIdForThemeRef.current = songId;
+      return;
+    }
+    if (prevSongIdForThemeRef.current !== songId) {
+      prevSongIdForThemeRef.current = songId;
+      advanceThemeForSong();
+    }
+  }, [currentSong?.id, advanceThemeForSong]);
 
   const isDark = true;
   const isAnimatedCanvasTheme = uiStyle !== 'liquid';
-  const glassClassMap: Record<UiStyleMode, string> = {
-    liquid: 'glass-surface-dark text-white',
+  const surfaceClassByKey = {
+    glass: 'glass-surface-dark text-white',
     space: 'space-surface-dark text-white',
     thunder: 'thunder-surface-dark text-white',
     undersea: 'undersea-surface-dark text-white',
     lava: 'lava-surface-dark text-white',
     nature: 'nature-surface-dark text-white',
-    rain: 'thunder-surface-dark text-white',
-    synthwave: 'lava-surface-dark text-white',
-    eclipse: 'space-surface-dark text-white',
-    nebula: 'space-surface-dark text-white',
-    aurora: 'undersea-surface-dark text-white',
-    bioluminescent: 'undersea-surface-dark text-white',
-    snowfall: 'thunder-surface-dark text-white',
-    blackhole: 'space-surface-dark text-white',
-  };
-  const bgClassMap: Record<UiStyleMode, string> = {
-    liquid: 'liquid-bg-dark text-white',
+  } as const;
+  const bgClassByKey = {
+    glass: 'liquid-bg-dark text-white',
     space: 'space-bg-dark text-white',
     thunder: 'thunder-bg-dark text-white',
     undersea: 'undersea-bg-dark text-white',
     lava: 'lava-bg-dark text-white',
     nature: 'nature-bg-dark text-white',
-    rain: 'thunder-bg-dark text-white',
-    synthwave: 'lava-bg-dark text-white',
-    eclipse: 'space-bg-dark text-white',
-    nebula: 'space-bg-dark text-white',
-    aurora: 'space-bg-dark text-white',
-    bioluminescent: 'undersea-bg-dark text-white',
-    snowfall: 'thunder-bg-dark text-white',
-    blackhole: 'space-bg-dark text-white',
-  };
-  const glassClass = glassClassMap[uiStyle] || 'glass-surface-dark text-white';
-  const bgClass = bgClassMap[uiStyle] || 'liquid-bg-dark text-white';
+  } as const;
+  const glassClass = surfaceClassByKey[activeThemeMeta.surface] || 'glass-surface-dark text-white';
+  const bgClass = bgClassByKey[activeThemeMeta.surface] || 'liquid-bg-dark text-white';
   const bubblePlayState = isPlaying ? 'bubble-playing' : 'bubble-paused';
 
   const isCoverDark = palette.brightnessMode === 'dark';
   const isCoverBright = palette.brightnessMode === 'bright';
 
   const dynamicBgStyle: React.CSSProperties = useMemo(() => {
-    if (uiStyle === 'space' || uiStyle === 'eclipse' || uiStyle === 'blackhole') {
-      return {
-        background: `radial-gradient(ellipse at 50% 0%, #090d1b 0%, #05070e 58%, #020307 100%)`,
-      };
+    const bd = activeThemeMeta.backdrop;
+    if (bd === 'space') {
+      return { background: `radial-gradient(ellipse at 50% 0%, #090d1b 0%, #05070e 58%, #020307 100%)` };
     }
-    if (uiStyle === 'thunder' || uiStyle === 'rain') {
-      return {
-        background: `linear-gradient(180deg, #0b0f1b 0%, #070a13 52%, #04050a 100%)`,
-      };
+    if (bd === 'storm') {
+      return { background: `linear-gradient(180deg, #0b0f1b 0%, #070a13 52%, #04050a 100%)` };
     }
-    if (uiStyle === 'undersea' || uiStyle === 'bioluminescent') {
+    if (bd === 'ocean') {
       return {
         background: `radial-gradient(ellipse at 50% 0%, rgba(${palette.primaryRgb}, 0.14) 0%, #031526 38%, #020d1a 72%, #01060d 100%)`,
       };
     }
-    if (uiStyle === 'lava') {
+    if (bd === 'warm') {
       return {
         background: `radial-gradient(ellipse at 50% 100%, rgba(${palette.primaryRgb}, 0.18) 0%, #100914 48%, #060409 100%)`,
       };
     }
-    if (uiStyle === 'synthwave') {
-      return {
-        background: `linear-gradient(180deg, #0b0618 0%, #16092a 48%, #080410 100%)`,
-      };
+    if (bd === 'synth') {
+      return { background: `linear-gradient(180deg, #0b0618 0%, #16092a 48%, #080410 100%)` };
     }
-    if (uiStyle === 'nebula') {
-      return {
-        background: `radial-gradient(ellipse at 50% 50%, #0a0918 0%, #05050d 62%, #020206 100%)`,
-      };
+    if (bd === 'aurora') {
+      return { background: `linear-gradient(180deg, #040c18 0%, #05111c 52%, #02060b 100%)` };
     }
-    if (uiStyle === 'aurora') {
-      return {
-        background: `linear-gradient(180deg, #040c18 0%, #05111c 52%, #02060b 100%)`,
-      };
+    if (bd === 'snow') {
+      return { background: `linear-gradient(180deg, #0b1322 0%, #070d18 55%, #04070e 100%)` };
     }
-    if (uiStyle === 'snowfall') {
-      return {
-        background: `linear-gradient(180deg, #0b1322 0%, #070d18 55%, #04070e 100%)`,
-      };
-    }
-    if (uiStyle === 'nature') {
+    if (bd === 'forest') {
       return {
         background: `radial-gradient(ellipse at 30% 10%, rgba(${palette.primaryRgb}, 0.14) 0%, #071912 42%, #04100b 75%, #020705 100%)`,
       };
@@ -2550,40 +2538,195 @@ export const App: React.FC = () => {
     return {
       background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.44) 0%, transparent 54%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.38) 0%, transparent 56%), radial-gradient(circle at 50% 44%, rgba(${palette.tertiaryRgb}, 0.24) 0%, transparent 64%), linear-gradient(145deg, rgba(${palette.primaryRgb}, 0.16) 0%, #090a10 56%, #0d1018 100%)`,
     };
-  }, [uiStyle, isCoverDark, isCoverBright, palette.primaryRgb, palette.secondaryRgb, palette.tertiaryRgb]);
+  }, [activeThemeMeta.backdrop, isCoverDark, isCoverBright, palette.primaryRgb, palette.secondaryRgb, palette.tertiaryRgb]);
 
-  // Grouped Artist Index across Library + Offline Songs (for Artist Search & Saved Artists)
+  // Smart Grouped Artist Index across Library + Offline Songs:
+  // Splits multi-artist collabs (feat./ft./,/&/x), normalizes punctuation/case/accents,
+  // and fuzzy-merges near-identical artist spellings into a single canonical artist entry.
   const allArtistsIndex = useMemo(() => {
-    const map = new Map<string, { name: string; songs: SubsonicSong[]; sampleSong: SubsonicSong }>();
+    const normalizeArtistKey = (raw: string): string =>
+      raw
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/^the\s+/, '')
+        .replace(/[^a-z0-9]/g, '');
+
+    const splitArtistCredits = (raw: string): string[] => {
+      const cleaned = (raw || 'Unknown Artist').trim();
+      if (!cleaned) return ['Unknown Artist'];
+      const parts = cleaned
+        .split(/\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b|\s+x\s+)\s*/i)
+        .map((p) => p.replace(/[()[\]]/g, '').trim())
+        .filter((p) => p.length > 0);
+      return parts.length > 0 ? parts : [cleaned];
+    };
+
+    const isSimilarKey = (a: string, b: string): boolean => {
+      if (a === b) return true;
+      const minLen = Math.min(a.length, b.length);
+      const maxLen = Math.max(a.length, b.length);
+      if (minLen < 5 || maxLen - minLen > 2) return false;
+      // Fast bounded edit distance (max 2)
+      const maxDist = minLen >= 9 ? 2 : 1;
+      let i = 0;
+      let j = 0;
+      let edits = 0;
+      while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) {
+          i++;
+          j++;
+        } else {
+          edits++;
+          if (edits > maxDist) return false;
+          if (a.length > b.length) i++;
+          else if (b.length > a.length) j++;
+          else {
+            i++;
+            j++;
+          }
+        }
+      }
+      edits += (a.length - i) + (b.length - j);
+      return edits <= maxDist;
+    };
+
+    interface Bucket {
+      key: string;
+      nameCounts: Map<string, number>;
+      songMap: Map<string, SubsonicSong>;
+      sampleSong: SubsonicSong;
+    }
+
+    const buckets = new Map<string, Bucket>();
     const combined = [...librarySongs, ...offlineSongs];
     const seenSongIds = new Set<string>();
+
     for (const s of combined) {
       if (!s || !s.id || seenSongIds.has(s.id)) continue;
       seenSongIds.add(s.id);
-      const rawArtist = (s.artist || 'Unknown Artist').trim();
-      const key = rawArtist.toLowerCase();
-      const existing = map.get(key);
-      if (existing) {
-        existing.songs.push(s);
-      } else {
-        map.set(key, { name: rawArtist, songs: [s], sampleSong: s });
+      const credits = splitArtistCredits(s.artist || 'Unknown Artist');
+      for (const credit of credits) {
+        const key = normalizeArtistKey(credit) || credit.toLowerCase();
+        let bucket = buckets.get(key);
+        if (!bucket) {
+          bucket = {
+            key,
+            nameCounts: new Map<string, number>(),
+            songMap: new Map<string, SubsonicSong>(),
+            sampleSong: s,
+          };
+          buckets.set(key, bucket);
+        }
+        bucket.nameCounts.set(credit, (bucket.nameCounts.get(credit) || 0) + 1);
+        bucket.songMap.set(s.id, s);
       }
     }
-    return Array.from(map.values()).sort((a, b) => b.songs.length - a.songs.length);
+
+    // Sort buckets largest-first so fuzzy similar spellings merge into the dominant canonical artist
+    const sortedBuckets = Array.from(buckets.values()).sort(
+      (a, b) => b.songMap.size - a.songMap.size
+    );
+    const merged: Bucket[] = [];
+    for (const b of sortedBuckets) {
+      const target = merged.find(
+        (m) => m.key[0] === b.key[0] && isSimilarKey(m.key, b.key)
+      );
+      if (target) {
+        for (const [nm, cnt] of b.nameCounts.entries()) {
+          target.nameCounts.set(nm, (target.nameCounts.get(nm) || 0) + cnt);
+        }
+        for (const [sid, song] of b.songMap.entries()) {
+          target.songMap.set(sid, song);
+        }
+      } else {
+        merged.push(b);
+      }
+    }
+
+    return merged
+      .map((b) => {
+        // Pick the most frequent display spelling as canonical name
+        let bestName = 'Unknown Artist';
+        let bestCount = -1;
+        const aliases: string[] = [];
+        for (const [nm, cnt] of b.nameCounts.entries()) {
+          aliases.push(nm);
+          if (cnt > bestCount || (cnt === bestCount && nm.length > bestName.length)) {
+            bestCount = cnt;
+            bestName = nm;
+          }
+        }
+        const otherAliases = aliases.filter((a) => a.toLowerCase() !== bestName.toLowerCase());
+        return {
+          name: bestName,
+          aliases: otherAliases,
+          songs: Array.from(b.songMap.values()),
+          sampleSong: b.sampleSong,
+        };
+      })
+      .sort((a, b) => b.songs.length - a.songs.length);
   }, [librarySongs, offlineSongs]);
+
+  const filteredArtistsIndex = useMemo(() => {
+    const q = artistSearchQuery.trim().toLowerCase();
+    if (!q) return allArtistsIndex;
+    return allArtistsIndex.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.aliases.some((al) => al.toLowerCase().includes(q))
+    );
+  }, [allArtistsIndex, artistSearchQuery]);
+
+  const filteredSavedArtists = useMemo(() => {
+    const q = artistSearchQuery.trim().toLowerCase();
+    if (!q) return savedArtists;
+    return savedArtists.filter((name) => name.toLowerCase().includes(q));
+  }, [savedArtists, artistSearchQuery]);
+
+  const filteredThemeCatalog = useMemo(() => {
+    const q = themeSearchQuery.trim().toLowerCase();
+    return THEME_CATALOG.filter((t) => {
+      if (themeCategoryFilter === 'Favourites' && !favoriteThemes.includes(t.id)) return false;
+      if (
+        themeCategoryFilter !== 'All' &&
+        themeCategoryFilter !== 'Favourites' &&
+        t.category !== themeCategoryFilter
+      ) {
+        return false;
+      }
+      if (
+        q &&
+        !t.label.toLowerCase().includes(q) &&
+        !t.desc.toLowerCase().includes(q) &&
+        !t.category.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [themeSearchQuery, themeCategoryFilter, favoriteThemes]);
 
   const spotlightMatchingArtists = useMemo(() => {
     const q = spotlightQuery.trim().toLowerCase();
     if (!q) return allArtistsIndex.slice(0, 6);
     return allArtistsIndex
-      .filter((a) => a.name.toLowerCase().includes(q))
+      .filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          a.aliases.some((al) => al.toLowerCase().includes(q))
+      )
       .slice(0, 8);
   }, [allArtistsIndex, spotlightQuery]);
 
   const selectedArtistSongs = useMemo(() => {
     if (!selectedArtistName) return [];
     const target = selectedArtistName.toLowerCase();
-    const match = allArtistsIndex.find((a) => a.name.toLowerCase() === target);
+    const match = allArtistsIndex.find(
+      (a) =>
+        a.name.toLowerCase() === target ||
+        a.aliases.some((al) => al.toLowerCase() === target)
+    );
     if (match) return match.songs;
     return librarySongs.filter((s) => (s.artist || '').toLowerCase().includes(target));
   }, [selectedArtistName, allArtistsIndex, librarySongs]);
@@ -4251,6 +4394,8 @@ export const App: React.FC = () => {
           tertiaryRgb={palette.tertiaryRgb}
           isPlaying={isPlaying}
           speed={visualizerSpeed}
+          songTitle={currentSong?.title || ''}
+          songArtist={currentSong?.artist || ''}
         />
       ) : (
       <div className="pointer-events-none fixed inset-0 overflow-hidden z-0 ambient-liquid-layer">
@@ -4418,7 +4563,10 @@ export const App: React.FC = () => {
         {/* Left Side: Liquid Audio + Status of Navidrome connection */}
         <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={() => setActiveView('home')}
+            onClick={() => {
+              setVisualizerFocusMode(false);
+              setActiveView('home');
+            }}
             className="flex items-center gap-2 text-left min-w-0 hover:opacity-90 transition"
             title="Liquid Audio Home"
           >
@@ -4506,9 +4654,52 @@ export const App: React.FC = () => {
             </span>
           </button>
 
+          {/* Focus Mode Button (Hides right panel so Now Playing expands to fill the inside with glass blur) */}
+          <button
+            onClick={() => setVisualizerFocusMode((v) => !v)}
+            style={visualizerFocusMode ? dynamicAccentStyle : undefined}
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+              visualizerFocusMode ? '' : 'bg-white/10 hover:bg-white/20'
+            }`}
+            title={
+              visualizerFocusMode
+                ? 'Restore Split Layout'
+                : 'Focus Mode (Hide right panel & expand Now Playing)'
+            }
+          >
+            {visualizerFocusMode ? (
+              <Minimize2 className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5" />
+            )}
+            <span className="hidden lg:inline">{visualizerFocusMode ? 'Restore' : 'Focus'}</span>
+          </button>
+
+          {/* Themes Studio Button */}
+          <button
+            onClick={() => {
+              setVisualizerFocusMode(false);
+              setActiveView(activeView === 'themes' ? 'home' : 'themes');
+            }}
+            style={activeView === 'themes' ? dynamicAccentStyle : undefined}
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+              activeView === 'themes' ? '' : 'bg-white/10 hover:bg-white/20'
+            }`}
+            title="Themes Studio (87 Themes, Favourites & Auto-Rotate)"
+          >
+            <Sparkles
+              className="w-3.5 h-3.5"
+              style={activeView !== 'themes' ? { color: `rgb(${palette.primaryRgb})` } : undefined}
+            />
+            <span className="hidden md:inline">Themes</span>
+          </button>
+
           {/* Wrapped Button */}
           <button
-            onClick={() => setActiveView(activeView === 'stats' ? 'home' : 'stats')}
+            onClick={() => {
+              setVisualizerFocusMode(false);
+              setActiveView(activeView === 'stats' ? 'home' : 'stats');
+            }}
             style={activeView === 'stats' ? dynamicAccentStyle : undefined}
             className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
               activeView === 'stats' ? '' : 'bg-white/10 hover:bg-white/20'
@@ -4540,8 +4731,8 @@ export const App: React.FC = () => {
         <div
           onMouseMove={handleNowPlayingMouseMove}
           onMouseLeave={handleNowPlayingMouseLeave}
-          className={`flex-1 min-h-0 flex flex-col justify-between rounded-3xl p-3 sm:p-4 lg:p-5 overflow-hidden ${glassClass} ${
-            activeView !== 'home' ? 'hidden lg:flex' : 'flex'
+          className={`flex-1 min-h-0 flex-col justify-between rounded-3xl p-3 sm:p-4 lg:p-5 overflow-hidden ${glassClass} ${
+            visualizerFocusMode ? 'flex' : activeView !== 'home' ? 'hidden lg:flex' : 'flex'
           }`}
         >
           {/* 3D Floating & Mouse-Rotating Artwork Stage */}
@@ -4977,8 +5168,8 @@ export const App: React.FC = () => {
 
         {/* RIGHT COLUMN: Home Feed, Lyrics, Library, Add, Queue, OR Liquid Wrapped Stats */}
         <div
-          className={`flex-1 min-h-0 flex flex-col rounded-3xl p-3.5 sm:p-5 overflow-hidden ${glassClass} ${
-            activeView === 'home' ? 'hidden lg:flex' : 'flex'
+          className={`flex-1 min-h-0 flex-col rounded-3xl p-3.5 sm:p-5 overflow-hidden ${glassClass} ${
+            visualizerFocusMode ? 'hidden' : activeView === 'home' ? 'hidden lg:flex' : 'flex'
           }`}
         >
           <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
@@ -5175,6 +5366,251 @@ export const App: React.FC = () => {
                   </div>
                 </section>
               </div>
+            ) : activeView === 'themes' ? (
+            /* DEDICATED THEMES STUDIO (87 THEMES, FAVOURITES, AUTO-ROTATE, SPEED & STATIC COLORS) */
+            <div className="flex flex-col h-full overflow-y-auto pr-1 space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 shrink-0" style={{ color: `rgb(${palette.primaryRgb})` }} />
+                    <span>Themes Studio</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/10 opacity-80">
+                      {THEME_CATALOG.length} Themes
+                    </span>
+                  </h3>
+                  <p className="text-[11px] opacity-65 truncate">
+                    Active: <span className="font-semibold text-white">{activeThemeMeta.label}</span> — {activeThemeMeta.desc}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => shuffleThemeNow(themeCategoryFilter === 'Favourites')}
+                    style={dynamicAccentStyle}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
+                    title="Jump to a random theme right now"
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                    <span>Shuffle Now</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Auto-Rotate on Each Song + Speed + Static Colors Controls */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                {/* Auto-Rotate on Song Change */}
+                <div className="p-2.5 rounded-2xl bg-black/25 border border-white/10 space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-wider font-bold opacity-70 block">
+                    Auto-Change Theme Per Song
+                  </label>
+                  <select
+                    value={themeCycleMode}
+                    onChange={(e) => setThemeCycleMode(e.target.value as ThemeCycleMode)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-black/45 border border-white/15 text-xs font-semibold text-white focus:outline-none cursor-pointer"
+                  >
+                    <option value="off" className="bg-[#0e1018]">Off (Keep Selected Theme)</option>
+                    <option value="random_all" className="bg-[#0e1018]">Random Theme After Each Song</option>
+                    <option value="fav_random" className="bg-[#0e1018]">Favourites Only (Random)</option>
+                    <option value="fav_loop" className="bg-[#0e1018]">Favourites Only (Loop In Order)</option>
+                  </select>
+                  <p className="text-[10px] opacity-55">
+                    {favoriteThemes.length} favourited theme{favoriteThemes.length === 1 ? '' : 's'} saved
+                  </p>
+                </div>
+
+                {/* Visualizer / Theme Speed */}
+                <div className="p-2.5 rounded-2xl bg-black/25 border border-white/10 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="uppercase tracking-wider font-bold opacity-70">Animation Speed</span>
+                    <span className="font-mono font-bold text-xs">{visualizerSpeed.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.25}
+                    max={1.5}
+                    step={0.05}
+                    value={visualizerSpeed}
+                    onChange={(e) => setVisualizerSpeed(Number(e.target.value))}
+                    className="w-full accent-purple-400 cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-[10px] opacity-55">
+                    <button type="button" onClick={() => setVisualizerSpeed(0.35)} className="hover:opacity-100">0.35x Slow</button>
+                    <button type="button" onClick={() => setVisualizerSpeed(0.65)} className="hover:opacity-100">0.65x Chill</button>
+                    <button type="button" onClick={() => setVisualizerSpeed(1.0)} className="hover:opacity-100">1.0x</button>
+                    <button type="button" onClick={() => setVisualizerSpeed(1.35)} className="hover:opacity-100">1.35x</button>
+                  </div>
+                </div>
+
+                {/* Dynamic Song Colors vs Static Colors */}
+                <div className="p-2.5 rounded-2xl bg-black/25 border border-white/10 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wider font-bold opacity-70">Colors</span>
+                    <div className="flex items-center gap-1 bg-black/35 p-0.5 rounded-lg border border-white/10">
+                      <button
+                        type="button"
+                        onClick={() => setStaticColorEnabled(false)}
+                        style={!staticColorEnabled ? dynamicAccentStyle : undefined}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition ${!staticColorEnabled ? '' : 'opacity-65 hover:opacity-100'}`}
+                      >
+                        Song
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStaticColorEnabled(true)}
+                        style={staticColorEnabled ? dynamicAccentStyle : undefined}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition ${staticColorEnabled ? '' : 'opacity-65 hover:opacity-100'}`}
+                      >
+                        Static
+                      </button>
+                    </div>
+                  </div>
+                  {staticColorEnabled ? (
+                    <div className="grid grid-cols-3 gap-1">
+                      <label className="flex items-center justify-between px-1.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[10px] cursor-pointer">
+                        <span className="opacity-70">1</span>
+                        <input
+                          type="color"
+                          value={staticPrimaryHex}
+                          onChange={(e) => setStaticColors(e.target.value, staticSecondaryHex, staticTertiaryHex)}
+                          className="w-5 h-5 bg-transparent border-0 cursor-pointer"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between px-1.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[10px] cursor-pointer">
+                        <span className="opacity-70">2</span>
+                        <input
+                          type="color"
+                          value={staticSecondaryHex}
+                          onChange={(e) => setStaticColors(staticPrimaryHex, e.target.value, staticTertiaryHex)}
+                          className="w-5 h-5 bg-transparent border-0 cursor-pointer"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between px-1.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[10px] cursor-pointer">
+                        <span className="opacity-70">3</span>
+                        <input
+                          type="color"
+                          value={staticTertiaryHex}
+                          onChange={(e) => setStaticColors(staticPrimaryHex, staticSecondaryHex, e.target.value)}
+                          className="w-5 h-5 bg-transparent border-0 cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] opacity-60 pt-1">
+                      Extracting live primary, secondary & accent colors from each track&apos;s cover art.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Search & Category Filter Pills */}
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-55" />
+                  <input
+                    type="text"
+                    value={themeSearchQuery}
+                    onChange={(e) => setThemeSearchQuery(e.target.value)}
+                    placeholder="Search all 87 themes (e.g. aurora, matrix, vinyl, caustics, kintsugi)..."
+                    className="w-full pl-8 pr-8 py-2 rounded-xl bg-black/30 border border-white/15 text-xs focus:outline-none focus:border-white/35"
+                  />
+                  {themeSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setThemeSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {(['All', 'Favourites', ...THEME_CATEGORIES] as ('All' | 'Favourites' | ThemeCategory)[]).map((cat) => {
+                    const active = themeCategoryFilter === cat;
+                    const count =
+                      cat === 'All'
+                        ? THEME_CATALOG.length
+                        : cat === 'Favourites'
+                        ? favoriteThemes.length
+                        : THEME_CATALOG.filter((t) => t.category === cat).length;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setThemeCategoryFilter(cat)}
+                        style={active ? dynamicAccentStyle : undefined}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition border ${
+                          active
+                            ? 'border-white/30'
+                            : 'bg-white/5 border-white/10 opacity-75 hover:opacity-100'
+                        }`}
+                      >
+                        {cat} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Theme Cards Grid (Memoized + content-visibility: auto) */}
+              {filteredThemeCatalog.length === 0 ? (
+                <div className="py-10 text-center text-xs opacity-60">
+                  {themeCategoryFilter === 'Favourites'
+                    ? 'No favourited themes yet — tap the heart on any theme to add it to your Favourites Loop!'
+                    : `No themes matching "${themeSearchQuery}".`}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 pb-4">
+                  {filteredThemeCatalog.map((t) => {
+                    const isActive = uiStyle === t.id;
+                    const isFav = favoriteThemes.includes(t.id);
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => setUiStyle(t.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setUiStyle(t.id);
+                          }
+                        }}
+                        style={isActive ? dynamicAccentStyle : undefined}
+                        className={`cv-auto p-3 rounded-2xl border transition cursor-pointer flex items-start justify-between gap-2 ${
+                          isActive
+                            ? 'border-white/40 shadow-lg'
+                            : 'bg-black/25 hover:bg-white/10 border-white/10'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold truncate">{t.label}</p>
+                          <p className="text-[10px] opacity-75 mt-0.5 line-clamp-2">{t.desc}</p>
+                          <span className="inline-block mt-1.5 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-black/25 opacity-75">
+                            {t.category}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavoriteTheme(t.id);
+                          }}
+                          className={`p-1.5 rounded-xl shrink-0 transition ${
+                            isFav
+                              ? 'bg-pink-500/25 text-pink-300'
+                              : 'bg-white/10 hover:bg-white/20 opacity-65 hover:opacity-100'
+                          }`}
+                          title={isFav ? 'Remove from Favourites' : 'Add to Favourites'}
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             ) : activeView === 'stats' ? (
             /* LIQUID WRAPPED & LISTENING STATS DASHBOARD */
             <div className="flex flex-col h-full overflow-y-auto pr-1 space-y-4">
@@ -6311,31 +6747,57 @@ export const App: React.FC = () => {
                       </>
                     ) : (
                       <>
+                        {/* Search Artists Bar */}
+                        <div className="relative mb-2">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-55" />
+                          <input
+                            type="text"
+                            value={artistSearchQuery}
+                            onChange={(e) => setArtistSearchQuery(e.target.value)}
+                            placeholder={`Search ${allArtistsIndex.length} grouped artists...`}
+                            className="w-full pl-8 pr-8 py-2 rounded-xl bg-black/30 border border-white/15 text-xs focus:outline-none focus:border-white/35"
+                          />
+                          {artistSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setArtistSearchQuery('')}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100"
+                              title="Clear search"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
                         <div className="space-y-2">
                           <h4 className="text-[11px] uppercase tracking-wider font-bold opacity-65 px-1">
-                            Saved Artists ({savedArtists.length})
+                            Saved Artists ({filteredSavedArtists.length})
                           </h4>
-                          {savedArtists.length === 0 ? (
+                          {filteredSavedArtists.length === 0 ? (
                             <p className="text-xs opacity-55 px-2 py-3 bg-white/5 rounded-2xl border border-white/10">
-                              No saved artists yet — search for any artist or tap an artist below to save them to your account.
+                              {artistSearchQuery
+                                ? `No saved artists matching "${artistSearchQuery}".`
+                                : 'No saved artists yet — search for any artist or tap an artist below to save them to your account.'}
                             </p>
                           ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {savedArtists.map((artistName) => {
+                              {filteredSavedArtists.map((artistName) => {
                                 const info = allArtistsIndex.find(
-                                  (a) => a.name.toLowerCase() === artistName.toLowerCase()
+                                  (a) =>
+                                    a.name.toLowerCase() === artistName.toLowerCase() ||
+                                    a.aliases.some((al) => al.toLowerCase() === artistName.toLowerCase())
                                 );
                                 const thumb = info ? getSongThumbUrl(info.sampleSong) : '';
                                 return (
                                   <div
                                     key={`saved-artist-${artistName}`}
-                                    onClick={() => setSelectedArtistName(artistName)}
-                                    className="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition"
+                                    onClick={() => setSelectedArtistName(info?.name || artistName)}
+                                    className="cv-auto flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer transition"
                                   >
                                     <div className="flex items-center gap-2.5 min-w-0">
                                       <div className="w-10 h-10 rounded-full overflow-hidden bg-black/30 border border-white/15 shrink-0 flex items-center justify-center">
                                         {thumb ? (
-                                          <img src={thumb} alt={artistName} className="w-full h-full object-cover" />
+                                          <img src={thumb} alt={artistName} className="w-full h-full object-cover" loading="lazy" />
                                         ) : (
                                           <User className="w-4 h-4 opacity-60" />
                                         )}
@@ -6366,10 +6828,17 @@ export const App: React.FC = () => {
 
                         <div className="space-y-2 pt-2">
                           <h4 className="text-[11px] uppercase tracking-wider font-bold opacity-65 px-1">
-                            All Library Artists ({allArtistsIndex.length})
+                            {artistSearchQuery
+                              ? `Matching Artists (${filteredArtistsIndex.length})`
+                              : `All Library Artists (${allArtistsIndex.length})`}
                           </h4>
+                          {filteredArtistsIndex.length === 0 ? (
+                            <p className="text-xs opacity-55 px-2 py-4 text-center">
+                              No artists found matching &ldquo;{artistSearchQuery}&rdquo;.
+                            </p>
+                          ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                            {allArtistsIndex.slice(0, 40).map((artist) => {
+                            {(artistSearchQuery ? filteredArtistsIndex : filteredArtistsIndex.slice(0, 60)).map((artist) => {
                               const thumb = getSongThumbUrl(artist.sampleSong);
                               const isSaved = savedArtists.some(
                                 (a) => a.toLowerCase() === artist.name.toLowerCase()
@@ -6378,7 +6847,7 @@ export const App: React.FC = () => {
                                 <div
                                   key={`all-artist-${artist.name}`}
                                   onClick={() => setSelectedArtistName(artist.name)}
-                                  className="flex items-center justify-between gap-2 p-2 rounded-2xl hover:bg-white/10 cursor-pointer transition"
+                                  className="cv-auto flex items-center justify-between gap-2 p-2 rounded-2xl hover:bg-white/10 cursor-pointer transition"
                                 >
                                   <div className="flex items-center gap-2.5 min-w-0">
                                     <div className="w-9 h-9 rounded-full overflow-hidden bg-black/30 border border-white/10 shrink-0 flex items-center justify-center">
@@ -6390,8 +6859,11 @@ export const App: React.FC = () => {
                                     </div>
                                     <div className="min-w-0">
                                       <p className="text-xs font-semibold truncate">{artist.name}</p>
-                                      <p className="text-[10px] opacity-55">
+                                      <p className="text-[10px] opacity-55 truncate">
                                         {artist.songs.length} track{artist.songs.length === 1 ? '' : 's'}
+                                        {artist.aliases.length > 0 && (
+                                          <span className="opacity-70"> • +{artist.aliases.length} similar</span>
+                                        )}
                                       </p>
                                     </div>
                                   </div>
@@ -6413,6 +6885,7 @@ export const App: React.FC = () => {
                               );
                             })}
                           </div>
+                          )}
                         </div>
                       </>
                     )}
@@ -8191,7 +8664,10 @@ export const App: React.FC = () => {
               return (
                 <button
                   key={item.id}
-                  onClick={item.onClick}
+                  onClick={() => {
+                    setVisualizerFocusMode(false);
+                    item.onClick();
+                  }}
                   className={`liquid-dock-item relative flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 flex-1 sm:flex-initial py-1.5 px-2 sm:px-3.5 sm:py-1.5 text-[10px] sm:text-xs font-semibold rounded-full transition-colors duration-200 select-none ${
                     isActive ? 'text-white' : 'opacity-70 hover:opacity-100 text-white'
                   }`}

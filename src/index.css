@@ -98,6 +98,11 @@
   backface-visibility: hidden;
 }
 
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
 .ambient-blur-surface,
 .ambient-bubble {
   -webkit-transform: translate3d(0, 0, 0);

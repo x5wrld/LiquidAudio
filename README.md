@@ -7,7 +7,7 @@ A modern, self-hosted **Navidrome / Subsonic** Progressive Web App (PWA) built w
 ## Key Features (BUILD V1)
 
 ### UI & Visuals
-- **14 Full Audio-Reactive Themes via Dropdown**: Switch between **Liquid Glass (Default)**, **Meteor Shower / Space**, **Thunder & Lightning**, **Water / Undersea**, **Lava Lamp**, **Nature**, **Rain on Glass**, **Synthwave**, **Solar Eclipse**, **Nebula**, **Aurora Borealis**, **Bioluminescent**, **Snowfall**, and **Blackhole** — with customizable **animation speed (`0.25x`–`1.5x`)** and either **Dynamic Song Colors** or **Static Custom Colors**.
+- **Dedicated Themes Studio (87 Audio-Reactive Themes)**: Dedicated **Themes** button on the top nav bar with search, category filters, **Favourites**, **Auto-Change Theme Per Song** (`Random All`, `Favourites Random`, `Favourites Loop In Order`), **animation speed (`0.25x`–`1.5x`)**, and **Dynamic Song Colors** or **Static Custom Colors**.
 - **Unified Navigation Layout**: Top bar with Liquid Audio + Navidrome connection status, central Song & Artist search, and quick actions (Mini-Player, Listen Along, Wrapped, Settings); bottom bar with **Home**, **Lyrics**, **Library**, **Add**, and **Queue**.
 - **Home Discovery Dashboard**: Side-by-side Now Playing view with **Public Playlists** (with one-click "+ Save" to Your Playlists), **Recently Played**, and **Random Songs**.
 - **Accurate Album-Reactive Backgrounds**: 12-hue vibrancy-weighted HSL color extraction with automatic luminance calibration — dark/black covers render deep obsidian backgrounds, while white/bright covers use a softened anti-glare pearl aesthetic.

@@ -1,6 +1,34 @@
 import React, { useEffect, useRef } from 'react';
 import { audioController } from './AudioVisualizer';
-import type { UiStyleMode } from './store';
+import type { UiStyleMode } from './themesCatalog';
+import type { ExtraThemeState } from './extraThemeRenderers';
+
+type ExtraRenderersModule = typeof import('./extraThemeRenderers');
+let cachedExtraModule: ExtraRenderersModule | null = null;
+let loadingExtraPromise: Promise<ExtraRenderersModule> | null = null;
+
+function loadExtraRenderers(): Promise<ExtraRenderersModule> {
+  if (cachedExtraModule) return Promise.resolve(cachedExtraModule);
+  if (!loadingExtraPromise) {
+    loadingExtraPromise = import('./extraThemeRenderers').then((mod) => {
+      cachedExtraModule = mod;
+      return mod;
+    });
+  }
+  return loadingExtraPromise;
+}
+
+const CORE_CANVAS_MODES = new Set<string>([
+  'space', 'thunder', 'undersea', 'lava', 'nature', 'rain', 'synthwave', 'eclipse',
+  'nebula', 'aurora', 'bioluminescent', 'snowfall', 'blackhole', 'ink', 'bokeh',
+  'tunnel', 'vinyl', 'oscilloscope', 'vumeter', 'kaleidoscope', 'voronoi', 'crt',
+  'topographic', 'laser', 'circuit', 'origami', 'thermal', 'turing', 'moire',
+  'halftone', 'pixelsort', 'caustics', 'prism', 'ferrofluid', 'oilslick',
+]);
+
+const PIXEL_SHADER_MODES = new Set<string>([
+  'thermal', 'turing', 'caustics', 'oilslick', 'chladni', 'julia', 'dither', 'soapfilm',
+]);
 
 export type AnimatedThemeMode = Exclude<UiStyleMode, 'liquid'>;
 
@@ -11,6 +39,8 @@ interface ThemeBackgroundCanvasProps {
   tertiaryRgb: string;
   isPlaying: boolean;
   speed?: number;
+  songTitle?: string;
+  songArtist?: string;
 }
 
 interface Star {
@@ -192,6 +222,108 @@ interface OrbitParticle {
   alpha: number;
 }
 
+interface RootBranch {
+  points: { x: number; y: number }[];
+  angle: number;
+  width: number;
+  depth: number;
+  maxLen: number;
+  grown: number;
+  rgbIdx: number;
+  alpha: number;
+  done: boolean;
+}
+
+interface InkWisp {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  maxR: number;
+  rot: number;
+  rotSpeed: number;
+  life: number;
+  maxLife: number;
+  rgbIdx: number;
+  curlPhase: number;
+}
+
+interface LensBokeh {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  depth: number; // 0..1
+  alpha: number;
+  phase: number;
+  rgbIdx: number;
+}
+
+interface VoronoiSite {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rgbIdx: number;
+}
+
+interface CircuitTrace {
+  pts: { x: number; y: number }[];
+  pulsePos: number; // 0..1
+  pulseSpeed: number;
+  rgbIdx: number;
+}
+
+interface MeltColumn {
+  x: number;
+  w: number;
+  dripY: number;
+  speed: number;
+  rgbIdx: number;
+  alpha: number;
+  phase: number;
+}
+
+function parseRgbTuple(rgb: string, fallback: [number, number, number]): [number, number, number] {
+  const parts = rgb.split(',');
+  if (parts.length !== 3) return fallback;
+  const r = parseInt(parts[0], 10);
+  const g = parseInt(parts[1], 10);
+  const b = parseInt(parts[2], 10);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return fallback;
+  return [r, g, b];
+}
+
+function clipPolygonHalfPlane(
+  poly: { x: number; y: number }[],
+  px: number,
+  py: number,
+  nx: number,
+  ny: number
+): { x: number; y: number }[] {
+  if (poly.length === 0) return poly;
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i];
+    const prev = poly[(i + poly.length - 1) % poly.length];
+    const dCur = (cur.x - px) * nx + (cur.y - py) * ny;
+    const dPrev = (prev.x - px) * nx + (prev.y - py) * ny;
+    if (dCur <= 0) {
+      if (dPrev > 0) {
+        const t = dPrev / (dPrev - dCur);
+        out.push({ x: prev.x + (cur.x - prev.x) * t, y: prev.y + (cur.y - prev.y) * t });
+      }
+      out.push(cur);
+    } else if (dPrev <= 0) {
+      const t = dPrev / (dPrev - dCur);
+      out.push({ x: prev.x + (cur.x - prev.x) * t, y: prev.y + (cur.y - prev.y) * t });
+    }
+  }
+  return out;
+}
+
 function generateLightningSegments(
   startX: number,
   startY: number,
@@ -228,25 +360,71 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
   tertiaryRgb,
   isPlaying,
   speed = 1.0,
+  songTitle = '',
+  songArtist = '',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const colorsRef = useRef({ primaryRgb, secondaryRgb, tertiaryRgb, isPlaying, speed });
+  const colorsRef = useRef({
+    primaryRgb,
+    secondaryRgb,
+    tertiaryRgb,
+    c1Tuple: parseRgbTuple(primaryRgb, [168, 85, 247]),
+    c2Tuple: parseRgbTuple(secondaryRgb, [56, 189, 248]),
+    c3Tuple: parseRgbTuple(tertiaryRgb, [244, 114, 182]),
+    isPlaying,
+    speed,
+    songTitle,
+    songArtist,
+  });
 
   useEffect(() => {
-    colorsRef.current = { primaryRgb, secondaryRgb, tertiaryRgb, isPlaying, speed };
-  }, [primaryRgb, secondaryRgb, tertiaryRgb, isPlaying, speed]);
+    colorsRef.current = {
+      primaryRgb,
+      secondaryRgb,
+      tertiaryRgb,
+      c1Tuple: parseRgbTuple(primaryRgb, [168, 85, 247]),
+      c2Tuple: parseRgbTuple(secondaryRgb, [56, 189, 248]),
+      c3Tuple: parseRgbTuple(tertiaryRgb, [244, 114, 182]),
+      isPlaying,
+      speed,
+      songTitle,
+      songArtist,
+    };
+  }, [primaryRgb, secondaryRgb, tertiaryRgb, isPlaying, speed, songTitle, songArtist]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dpr = Math.min(window.devicePixelRatio || 1, width < 768 ? 1.5 : 2);
 
     const freqBuf = new Uint8Array(64);
+    const timeBuf = new Uint8Array(128);
+
+    // Reusable offscreen buffer for pixel-shader themes (thermal, turing, caustics, oilslick)
+    const offCanvas = document.createElement('canvas');
+    let offW = 96;
+    let offH = 54;
+    offCanvas.width = offW;
+    offCanvas.height = offH;
+    const offCtx = offCanvas.getContext('2d');
+    let offImg: ImageData | null = offCtx ? offCtx.createImageData(offW, offH) : null;
+
+    // Pre-allocated Reaction-Diffusion (Turing) double buffers (80x48)
+    const rdW = 80;
+    const rdH = 48;
+    const rdSize = rdW * rdH;
+    let rdA = new Float32Array(rdSize);
+    let rdB = new Float32Array(rdSize);
+    let rdA2 = new Float32Array(rdSize);
+    let rdB2 = new Float32Array(rdSize);
+
+    // Pre-allocated topographic elevation field (avoids per-frame TypedArray GC)
+    let topoField = new Float32Array(43 * 29);
 
     // State pools per theme
     const stars: Star[] = [];
@@ -265,6 +443,26 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
     const jellies: Jellyfish[] = [];
     const snowflakes: Snowflake[] = [];
     const orbitParticles: OrbitParticle[] = [];
+    const roots: RootBranch[] = [];
+    const inkWisps: InkWisp[] = [];
+    const lensBokehs: LensBokeh[] = [];
+    const voronoiSites: VoronoiSite[] = [];
+    const circuitTraces: CircuitTrace[] = [];
+    const meltCols: MeltColumn[] = [];
+    const vuLevels = new Float32Array(28);
+    const vuPeaks = new Float32Array(28);
+    let extraState: ExtraThemeState | null = cachedExtraModule
+      ? cachedExtraModule.createExtraThemeState()
+      : null;
+    const needsExtra = !CORE_CANVAS_MODES.has(mode);
+    let cancelled = false;
+    if (needsExtra && !cachedExtraModule) {
+      loadExtraRenderers().then((mod) => {
+        if (cancelled) return;
+        extraState = mod.createExtraThemeState();
+        mod.initExtraThemeState(mode, width, height, extraState);
+      });
+    }
 
     const getRgbByIdx = (idx: number): string => {
       const { primaryRgb: c1, secondaryRgb: c2, tertiaryRgb: c3 } = colorsRef.current;
@@ -344,6 +542,14 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
       jellies.length = 0;
       snowflakes.length = 0;
       orbitParticles.length = 0;
+      roots.length = 0;
+      inkWisps.length = 0;
+      lensBokehs.length = 0;
+      voronoiSites.length = 0;
+      circuitTraces.length = 0;
+      meltCols.length = 0;
+      vuLevels.fill(0);
+      vuPeaks.fill(0);
 
       const isMobile = width < 768;
 
@@ -468,6 +674,150 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
             rgbIdx: i % 3,
           });
         }
+        // Seed primary growing tree roots from the top & upper edges
+        const seedCount = isMobile ? 5 : 8;
+        for (let i = 0; i < seedCount; i++) {
+          const sx = width * (0.08 + (i / Math.max(1, seedCount - 1)) * 0.84) + (Math.random() - 0.5) * 40;
+          roots.push({
+            points: [{ x: sx, y: -10 }],
+            angle: Math.PI * 0.5 + (Math.random() - 0.5) * 0.42,
+            width: 3.4 + Math.random() * 2.2,
+            depth: 0,
+            maxLen: height * (0.34 + Math.random() * 0.38),
+            grown: 0,
+            rgbIdx: i % 3,
+            alpha: 0.85,
+            done: false,
+          });
+        }
+      } else if (mode === 'ink') {
+        const wispCount = isMobile ? 16 : 26;
+        for (let i = 0; i < wispCount; i++) {
+          const cx = width * (0.2 + Math.random() * 0.6);
+          const cy = height * (0.2 + Math.random() * 0.6);
+          const ang = Math.random() * Math.PI * 2;
+          inkWisps.push({
+            x: cx,
+            y: cy,
+            vx: Math.cos(ang) * (0.2 + Math.random() * 0.45),
+            vy: Math.sin(ang) * (0.2 + Math.random() * 0.45),
+            r: 25 + Math.random() * 45,
+            maxR: Math.min(width, height) * (0.18 + Math.random() * 0.2),
+            rot: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.014,
+            life: Math.random() * 220,
+            maxLife: 240 + Math.random() * 180,
+            rgbIdx: i % 3,
+            curlPhase: Math.random() * Math.PI * 2,
+          });
+        }
+      } else if (mode === 'bokeh') {
+        const bCount = isMobile ? 18 : 30;
+        for (let i = 0; i < bCount; i++) {
+          const depth = Math.random();
+          lensBokehs.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * (0.15 + depth * 0.4),
+            vy: -0.1 - Math.random() * (0.18 + depth * 0.35),
+            r: (isMobile ? 22 : 34) + depth * (isMobile ? 55 : 88),
+            depth,
+            alpha: 0.14 + (1 - depth * 0.5) * 0.24,
+            phase: Math.random() * Math.PI * 2,
+            rgbIdx: i % 3,
+          });
+        }
+      } else if (mode === 'voronoi') {
+        const siteCount = isMobile ? 14 : 22;
+        for (let i = 0; i < siteCount; i++) {
+          voronoiSites.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * 0.55,
+            vy: (Math.random() - 0.5) * 0.55,
+            rgbIdx: i % 3,
+          });
+        }
+      } else if (mode === 'circuit') {
+        const traceCount = isMobile ? 18 : 32;
+        const grid = isMobile ? 36 : 44;
+        const dirs = [
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          [-1, 1],
+          [-1, 0],
+          [-1, -1],
+          [0, -1],
+          [1, -1],
+        ];
+        for (let i = 0; i < traceCount; i++) {
+          let gx = Math.floor(Math.random() * Math.max(4, Math.floor(width / grid))) * grid;
+          let gy = Math.floor(Math.random() * Math.max(4, Math.floor(height / grid))) * grid;
+          const pts = [{ x: gx, y: gy }];
+          let dirIdx = Math.floor(Math.random() * 8);
+          const segs = 4 + Math.floor(Math.random() * 5);
+          for (let s = 0; s < segs; s++) {
+            const len = (1 + Math.floor(Math.random() * 3)) * grid;
+            gx += dirs[dirIdx][0] * len;
+            gy += dirs[dirIdx][1] * len;
+            pts.push({ x: gx, y: gy });
+            // 45-degree or 90-degree PCB turn
+            dirIdx = (dirIdx + (Math.random() < 0.5 ? 1 : 7)) % 8;
+          }
+          circuitTraces.push({
+            pts,
+            pulsePos: Math.random(),
+            pulseSpeed: 0.14 + Math.random() * 0.24,
+            rgbIdx: i % 3,
+          });
+        }
+      } else if (mode === 'pixelsort') {
+        const colCount = isMobile ? 36 : 64;
+        const colW = width / colCount;
+        for (let i = 0; i < colCount; i++) {
+          meltCols.push({
+            x: i * colW,
+            w: colW + 1,
+            dripY: Math.random() * height,
+            speed: 0.5 + Math.random() * 1.9,
+            rgbIdx: i % 3,
+            alpha: 0.18 + Math.random() * 0.34,
+            phase: Math.random() * Math.PI * 2,
+          });
+        }
+      } else if (mode === 'turing') {
+        offW = rdW;
+        offH = rdH;
+        offCanvas.width = offW;
+        offCanvas.height = offH;
+        offImg = offCtx ? offCtx.createImageData(offW, offH) : null;
+        rdA.fill(1);
+        rdB.fill(0);
+        // Seed organic coral/zebra centers
+        for (let s = 0; s < 14; s++) {
+          const sx = 6 + Math.floor(Math.random() * (rdW - 12));
+          const sy = 6 + Math.floor(Math.random() * (rdH - 12));
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              rdB[(sy + dy) * rdW + (sx + dx)] = 1;
+            }
+          }
+        }
+      } else if (
+        mode === 'thermal' ||
+        mode === 'caustics' ||
+        mode === 'oilslick' ||
+        mode === 'chladni' ||
+        mode === 'julia' ||
+        mode === 'dither' ||
+        mode === 'soapfilm'
+      ) {
+        offW = isMobile ? 76 : 104;
+        offH = isMobile ? 44 : 60;
+        offCanvas.width = offW;
+        offCanvas.height = offH;
+        offImg = offCtx ? offCtx.createImageData(offW, offH) : null;
       } else if (mode === 'rain') {
         const bokehCount = isMobile ? 9 : 15;
         for (let i = 0; i < bokehCount; i++) {
@@ -606,6 +956,9 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       initThemeEntities();
+      if (needsExtra && cachedExtraModule && extraState) {
+        cachedExtraModule.initExtraThemeState(mode, width, height, extraState);
+      }
     };
 
     resize();
@@ -613,6 +966,7 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
 
     let rafId = 0;
     let lastTs = performance.now();
+    let lastDrawTs = 0;
     let simTime = performance.now() * 0.001;
     let spawnAccumulator = 0;
     let prevBass = 0;
@@ -626,6 +980,14 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
         rafId = 0;
         return;
       }
+
+      // Adaptive frame pacing: cap mobile & pixel-shader themes to ~30fps to save CPU/battery
+      const minFrameMs = width < 768 || PIXEL_SHADER_MODES.has(mode) ? 32 : 0;
+      if (minFrameMs > 0 && now - lastDrawTs < minFrameMs) {
+        rafId = requestAnimationFrame(render);
+        return;
+      }
+      lastDrawTs = now;
 
       const rawDt = Math.min(0.05, Math.max(0.008, (now - lastTs) / 1000));
       lastTs = now;
@@ -643,6 +1005,9 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
       const analyser = audioController.analyser;
       if (playing && analyser) {
         analyser.getByteFrequencyData(freqBuf);
+        if (mode === 'oscilloscope') {
+          analyser.getByteTimeDomainData(timeBuf);
+        }
         let bSum = 0;
         for (let i = 0; i < 12; i++) bSum += freqBuf[i];
         bass = Math.min(1, bSum / (12 * 200));
@@ -956,106 +1321,105 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
       }
 
       // ================================================================
-      // 3. WATER / UNDERSEA (Caustics, Light Shafts, Bubbles & Plankton)
+      // 3. OCEAN WAVES (Layered Rolling Wave Swells & Glowing Seafoam)
       // ================================================================
       else if (mode === 'undersea') {
-        // Underwater sunbeams / caustic light shafts from the top surface
-        const shaftCount = width < 768 ? 5 : 7;
-        for (let i = 0; i < shaftCount; i++) {
-          const baseX = (width / (shaftCount + 1)) * (i + 1) + Math.sin(tSec * 0.38 + i * 1.3) * 45;
-          const topW = 40 + (i % 3) * 28;
-          const botW = topW * 3.4;
-          const shiftX = 95 + Math.sin(tSec * 0.25 + i) * 35;
-          const beamAlpha = (0.045 + mids * 0.065) * (0.7 + 0.3 * Math.sin(tSec * 0.9 + i * 2.1));
-          const beamColor = i % 2 === 0 ? c1 : c2;
+        // Moonlit / song-colored horizon reflection glow
+        const moonGlow = ctx.createRadialGradient(
+          width * 0.5,
+          height * 0.22,
+          10,
+          width * 0.5,
+          height * 0.28,
+          Math.max(width, height) * 0.55
+        );
+        moonGlow.addColorStop(0, `rgba(${c3}, ${(0.18 + mids * 0.14).toFixed(3)})`);
+        moonGlow.addColorStop(0.45, `rgba(${c1}, ${(0.1 + bass * 0.08).toFixed(3)})`);
+        moonGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = moonGlow;
+        ctx.fillRect(0, 0, width, height);
 
-          const grad = ctx.createLinearGradient(baseX, 0, baseX + shiftX, height * 0.88);
-          grad.addColorStop(0, `rgba(${beamColor}, ${(beamAlpha * 1.4).toFixed(3)})`);
-          grad.addColorStop(0.45, `rgba(${beamColor}, ${(beamAlpha * 0.65).toFixed(3)})`);
-          grad.addColorStop(1, `rgba(${beamColor}, 0)`);
+        // 6 layered rolling ocean wave swells from distant horizon to foreground
+        const waveLayers = 6;
+        for (let w = 0; w < waveLayers; w++) {
+          const depthFrac = w / (waveLayers - 1); // 0 = far, 1 = near
+          const baseY = height * (0.38 + depthFrac * 0.5);
+          const amp = (14 + depthFrac * 26) * (1 + bass * 0.72);
+          const freq = 0.0028 + (1 - depthFrac) * 0.0025;
+          const phase = tSec * (0.55 + depthFrac * 0.55) * (w % 2 === 0 ? 1 : -0.8) + w * 1.9;
+          const rgb = getRgbByIdx(w % 3);
 
-          ctx.fillStyle = grad;
           ctx.beginPath();
-          ctx.moveTo(baseX - topW * 0.5, 0);
-          ctx.lineTo(baseX + topW * 0.5, 0);
-          ctx.lineTo(baseX + shiftX + botW * 0.5, height * 0.92);
-          ctx.lineTo(baseX + shiftX - botW * 0.5, height * 0.92);
-          ctx.closePath();
-          ctx.fill();
-        }
-
-        // Gentle deep-sea current ribbon waves
-        for (let w = 0; w < 2; w++) {
-          ctx.beginPath();
-          const baseY = height * (0.64 + w * 0.16);
           ctx.moveTo(0, height);
-          for (let x = 0; x <= width; x += 36) {
+          const crestPoints: { x: number; y: number }[] = [];
+          const stepX = width < 768 ? 22 : 18;
+          for (let x = 0; x <= width + stepX; x += stepX) {
             const y =
               baseY +
-              Math.sin(x * 0.0045 + tSec * (0.55 + w * 0.22) + w * 2) * (18 + bass * 22) +
-              Math.cos(x * 0.009 - tSec * 0.35) * 10;
+              Math.sin(x * freq + phase) * amp +
+              Math.cos(x * freq * 1.9 - phase * 0.75) * (amp * 0.38);
             ctx.lineTo(x, y);
+            crestPoints.push({ x, y });
           }
           ctx.lineTo(width, height);
           ctx.closePath();
-          ctx.fillStyle = `rgba(${w === 0 ? c1 : c2}, ${(0.055 + bass * 0.05).toFixed(3)})`;
+
+          const fillGrad = ctx.createLinearGradient(0, baseY - amp, 0, height);
+          fillGrad.addColorStop(0, `rgba(${rgb}, ${(0.14 + depthFrac * 0.16 + bass * 0.08).toFixed(3)})`);
+          fillGrad.addColorStop(0.55, `rgba(${c2}, ${(0.08 + depthFrac * 0.12).toFixed(3)})`);
+          fillGrad.addColorStop(1, 'rgba(2, 10, 20, 0.78)');
+          ctx.fillStyle = fillGrad;
           ctx.fill();
-        }
 
-        // Bioluminescent plankton motes
-        for (let i = 0; i < plankton.length; i++) {
-          const p = plankton[i];
-          p.x += (p.vx + Math.sin(tSec * 0.6 + p.phase) * 0.22) * step;
-          p.y += (p.vy + Math.cos(tSec * 0.5 + p.phase) * 0.18) * step;
-          if (p.x < -10) p.x = width + 10;
-          if (p.x > width + 10) p.x = -10;
-          if (p.y < -10) p.y = height + 10;
-          if (p.y > height + 10) p.y = -10;
-
-          const glow = 0.4 + 0.6 * Math.sin(tSec * 1.7 + p.phase);
-          const rgb = getRgbByIdx(p.rgbIdx);
-          const pr = p.r * (1 + energy * 0.55);
-          const g = ctx.createRadialGradient(p.x, p.y, 0.2, p.x, p.y, pr * 3.2);
-          g.addColorStop(0, `rgba(255, 255, 255, ${(glow * 0.65).toFixed(3)})`);
-          g.addColorStop(0.35, `rgba(${rgb}, ${(glow * 0.45).toFixed(3)})`);
-          g.addColorStop(1, `rgba(${rgb}, 0)`);
-          ctx.fillStyle = g;
+          // Luminous seafoam / light-catching crest ridge
           ctx.beginPath();
-          ctx.arc(p.x, p.y, pr * 3.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Audio-reactive rising bubbles
-        for (let i = 0; i < bubbles.length; i++) {
-          const b = bubbles[i];
-          b.y -= b.vy * (1 + bass * 1.45) * step;
-          if (b.y < -b.r * 2) {
-            b.y = height + b.r * 2 + Math.random() * 40;
-            b.x = Math.random() * width;
+          for (let k = 0; k < crestPoints.length; k++) {
+            const pt = crestPoints[k];
+            if (k === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
           }
-          const drawX = b.x + Math.sin(tSec * b.swayFreq + b.phase) * b.swayAmp;
-          const rad = b.r * (1 + bass * 0.16);
-
-          // Soft translucent bubble body
-          const bg = ctx.createRadialGradient(drawX - rad * 0.3, b.y - rad * 0.3, rad * 0.1, drawX, b.y, rad);
-          bg.addColorStop(0, `rgba(255, 255, 255, ${(b.alpha * 0.45).toFixed(3)})`);
-          bg.addColorStop(0.65, `rgba(${c1}, ${(b.alpha * 0.16).toFixed(3)})`);
-          bg.addColorStop(1, `rgba(${c2}, ${(b.alpha * 0.52).toFixed(3)})`);
-          ctx.fillStyle = bg;
-          ctx.beginPath();
-          ctx.arc(drawX, b.y, rad, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Rim + specular highlight dot
-          ctx.strokeStyle = `rgba(220, 245, 255, ${(b.alpha * 0.72).toFixed(3)})`;
-          ctx.lineWidth = 0.9;
+          ctx.strokeStyle = `rgba(235, 248, 255, ${(0.18 + depthFrac * 0.28 + bass * 0.22).toFixed(3)})`;
+          ctx.lineWidth = 1.1 + depthFrac * 1.5;
           ctx.stroke();
-
-          ctx.fillStyle = `rgba(255, 255, 255, ${(b.alpha * 0.9).toFixed(3)})`;
-          ctx.beginPath();
-          ctx.arc(drawX - rad * 0.32, b.y - rad * 0.32, Math.max(0.8, rad * 0.22), 0, Math.PI * 2);
-          ctx.fill();
         }
+      }
+
+      // ================================================================
+      else if (mode === 'oilslick' && offCtx && offImg) {
+        const data = offImg.data;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const t = tSec * 0.45;
+        const shift = bass * 1.4;
+
+        for (let y = 0; y < offH; y++) {
+          const ny = (y / offH) * 3.4;
+          for (let x = 0; x < offW; x++) {
+            const nx = (x / offW) * 4.8;
+            // Thin-film optical thickness field
+            const thick =
+              Math.sin(nx + Math.cos(ny * 1.3 + t)) +
+              Math.cos(ny - Math.sin(nx * 1.1 - t * 0.8)) +
+              0.6 * Math.sin((nx + ny) * 1.2 + t * 0.65);
+            const phase = thick * 2.8 + shift;
+            // Pearlescent RGB thin-film interference curves
+            const ir = 0.5 + 0.5 * Math.cos(phase);
+            const ig = 0.5 + 0.5 * Math.cos(phase + 2.094);
+            const ib = 0.5 + 0.5 * Math.cos(phase + 4.188);
+            // Keep obsidian troughs dark so iridescent bands gleam cleanly
+            const sheen = Math.pow(0.5 + 0.5 * Math.sin(thick * 1.9 + t * 0.5), 1.8) * (0.58 + energy * 0.35);
+
+            const idx = (y * offW + x) * 4;
+            data[idx] = Math.min(255, (ir * 195 + r1 * 0.28) * sheen + 6);
+            data[idx + 1] = Math.min(255, (ig * 195 + g1 * 0.28) * sheen + 7);
+            data[idx + 2] = Math.min(255, (ib * 210 + b1 * 0.28) * sheen + 11);
+            data[idx + 3] = 235;
+          }
+        }
+        offCtx.putImageData(offImg, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, 0, width, height);
+        ctx.restore();
       }
 
       // ================================================================
@@ -1159,96 +1523,126 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
       }
 
       // ================================================================
-      // 5. NATURE (Twilight Forest Canopy, Sunbeams, Fireflies & Leaves)
+      // 5. GROWING TREE ROOTS (Organic Branching Roots + Luminous Sap)
       // ================================================================
       else if (mode === 'nature') {
-        // Soft forest moonlight / sunbeams filtering diagonally from top-left
-        for (let i = 0; i < 4; i++) {
-          const sx = width * (0.08 + i * 0.22) + Math.sin(tSec * 0.25 + i) * 30;
-          const beamAlpha = (0.04 + mids * 0.055) * (0.75 + 0.25 * Math.sin(tSec * 0.7 + i * 1.6));
-          const g = ctx.createLinearGradient(sx, 0, sx + width * 0.22, height * 0.85);
-          g.addColorStop(0, `rgba(${i % 2 === 0 ? c1 : c3}, ${(beamAlpha * 1.35).toFixed(3)})`);
-          g.addColorStop(0.6, `rgba(${c2}, ${(beamAlpha * 0.45).toFixed(3)})`);
-          g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.moveTo(sx - 35, 0);
-          ctx.lineTo(sx + 55, 0);
-          ctx.lineTo(sx + width * 0.28, height * 0.88);
-          ctx.lineTo(sx + width * 0.12, height * 0.88);
-          ctx.closePath();
-          ctx.fill();
-        }
+        const earthGlow = ctx.createRadialGradient(
+          width * 0.5,
+          0,
+          10,
+          width * 0.5,
+          height * 0.3,
+          Math.max(width, height) * 0.65
+        );
+        earthGlow.addColorStop(0, `rgba(${c1}, ${(0.14 + bass * 0.1).toFixed(3)})`);
+        earthGlow.addColorStop(0.55, `rgba(${c2}, ${(0.06 + mids * 0.05).toFixed(3)})`);
+        earthGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = earthGlow;
+        ctx.fillRect(0, 0, width, height);
 
-        // Subtle organic canopy silhouette along top edge
-        ctx.fillStyle = 'rgba(4, 14, 10, 0.58)';
-        for (let i = 0; i < 7; i++) {
-          const cx = (width / 6) * i + Math.sin(tSec * 0.3 + i) * 8;
-          const r = (width < 768 ? 72 : 120) + (i % 3) * 28;
-          ctx.beginPath();
-          ctx.arc(cx, -r * 0.45, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        const maxBranches = width < 768 ? 52 : 88;
+        let activeGrowing = 0;
 
-        // Subtle rolling forest floor hills at the very bottom
-        ctx.beginPath();
-        ctx.moveTo(0, height);
-        for (let x = 0; x <= width; x += 40) {
-          const y = height - 28 - Math.sin(x * 0.004 + 0.6) * 22 - Math.cos(x * 0.009) * 10;
-          ctx.lineTo(x, y);
-        }
-        ctx.lineTo(width, height);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(4, 14, 9, 0.55)';
-        ctx.fill();
+        for (let i = roots.length - 1; i >= 0; i--) {
+          const rt = roots[i];
+          if (!rt.done) {
+            activeGrowing++;
+            const growStep = (1.1 + bass * 2.2) * step;
+            const last = rt.points[rt.points.length - 1];
+            rt.angle += (Math.sin(tSec * 1.4 + i * 2.1 + rt.grown * 0.03) * 0.045 + (Math.random() - 0.5) * 0.08) * step;
+            // Gently bias downward while allowing wide organic spread
+            rt.angle += (Math.PI * 0.5 - rt.angle) * 0.008 * step;
+            const nx = last.x + Math.cos(rt.angle) * growStep;
+            const ny = last.y + Math.sin(rt.angle) * growStep;
+            rt.grown += growStep;
 
-        // Drifting leaves / petals on a gentle breeze
-        for (let i = 0; i < leaves.length; i++) {
-          const lf = leaves[i];
-          lf.x += (lf.vx + Math.sin(tSec * 0.8 + lf.swayPhase) * 0.35 + energy * 0.35) * step;
-          lf.y += (lf.vy + Math.cos(tSec * 0.9 + lf.swayPhase) * 0.18) * step;
-          lf.angle += lf.spin * (1 + energy * 0.8) * step;
+            if (rt.points.length < 120) {
+              const prev = rt.points[rt.points.length - 1];
+              if (Math.hypot(nx - prev.x, ny - prev.y) > 4.5) {
+                rt.points.push({ x: nx, y: ny });
+              }
+            }
 
-          if (lf.x > width + 30) lf.x = -25;
-          if (lf.y > height + 30) {
-            lf.y = -20;
-            lf.x = Math.random() * width;
+            // Organic root forking
+            if (
+              rt.depth < 3 &&
+              roots.length < maxBranches &&
+              rt.grown > 32 &&
+              Math.random() < dt * (0.55 + bass * 0.9)
+            ) {
+              const dir = Math.random() < 0.5 ? -1 : 1;
+              roots.push({
+                points: [{ x: nx, y: ny }],
+                angle: rt.angle + dir * (0.35 + Math.random() * 0.45),
+                width: Math.max(0.85, rt.width * 0.66),
+                depth: rt.depth + 1,
+                maxLen: rt.maxLen * (0.52 + Math.random() * 0.25),
+                grown: 0,
+                rgbIdx: (rt.rgbIdx + 1) % 3,
+                alpha: rt.alpha * 0.92,
+                done: false,
+              });
+            }
+
+            if (rt.grown >= rt.maxLen || ny > height + 20 || nx < -30 || nx > width + 30) {
+              rt.done = true;
+            }
+          } else {
+            // Gently fade completed roots so fresh luminous networks continuously grow
+            rt.alpha -= dt * 0.065;
+            if (rt.alpha <= 0.02) {
+              roots.splice(i, 1);
+              continue;
+            }
           }
 
-          const rgb = getRgbByIdx(lf.rgbIdx);
-          ctx.save();
-          ctx.translate(lf.x, lf.y);
-          ctx.rotate(lf.angle);
-          ctx.fillStyle = `rgba(${rgb}, ${(lf.alpha + mids * 0.14).toFixed(3)})`;
+          if (rt.points.length < 2) continue;
+          const rgb = getRgbByIdx(rt.rgbIdx);
+
+          // Soft bioluminescent root glow
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
           ctx.beginPath();
-          ctx.ellipse(0, 0, lf.size, lf.size * 0.46, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+          ctx.moveTo(rt.points[0].x, rt.points[0].y);
+          for (let p = 1; p < rt.points.length; p++) {
+            ctx.lineTo(rt.points[p].x, rt.points[p].y);
+          }
+          ctx.strokeStyle = `rgba(${rgb}, ${(rt.alpha * (0.22 + bass * 0.28)).toFixed(3)})`;
+          ctx.lineWidth = rt.width * 3.1;
+          ctx.stroke();
+
+          // Crisp bark / vein core
+          ctx.strokeStyle = `rgba(${rgb}, ${(rt.alpha * (0.68 + mids * 0.25)).toFixed(3)})`;
+          ctx.lineWidth = rt.width;
+          ctx.stroke();
+
+          // Glowing growing root tip
+          if (!rt.done) {
+            const tip = rt.points[rt.points.length - 1];
+            const tg = ctx.createRadialGradient(tip.x, tip.y, 0.5, tip.x, tip.y, rt.width * 4.5);
+            tg.addColorStop(0, `rgba(255, 255, 240, ${(rt.alpha * 0.9).toFixed(3)})`);
+            tg.addColorStop(0.4, `rgba(${rgb}, ${(rt.alpha * 0.6).toFixed(3)})`);
+            tg.addColorStop(1, `rgba(${rgb}, 0)`);
+            ctx.fillStyle = tg;
+            ctx.beginPath();
+            ctx.arc(tip.x, tip.y, rt.width * 4.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
 
-        // Audio-reactive glowing fireflies
-        for (let i = 0; i < fireflies.length; i++) {
-          const f = fireflies[i];
-          f.x += (f.vx + Math.sin(tSec * 0.75 + f.phase) * 0.42) * step;
-          f.y += (f.vy + Math.cos(tSec * 0.65 + f.phase * 1.3) * 0.36) * step;
-          if (f.x < -15) f.x = width + 15;
-          if (f.x > width + 15) f.x = -15;
-          if (f.y < height * 0.08) f.y = height * 0.92;
-          if (f.y > height * 0.96) f.y = height * 0.12;
-
-          const pulse = 0.38 + 0.62 * Math.pow(0.5 + 0.5 * Math.sin(tSec * f.pulseSpeed + f.phase), 1.6);
-          const intensity = Math.min(1, pulse * (0.72 + bass * 0.68));
-          const rgb = getRgbByIdx(f.rgbIdx);
-          const haloR = f.r * (4.2 + bass * 2.4);
-
-          const fg = ctx.createRadialGradient(f.x, f.y, 0.3, f.x, f.y, haloR);
-          fg.addColorStop(0, `rgba(255, 255, 235, ${intensity.toFixed(3)})`);
-          fg.addColorStop(0.3, `rgba(${rgb}, ${(intensity * 0.68).toFixed(3)})`);
-          fg.addColorStop(1, `rgba(${rgb}, 0)`);
-          ctx.fillStyle = fg;
-          ctx.beginPath();
-          ctx.arc(f.x, f.y, haloR, 0, Math.PI * 2);
-          ctx.fill();
+        // Sprout fresh primary roots whenever the network thins out
+        if (activeGrowing < 3 && roots.length < maxBranches * 0.75) {
+          roots.push({
+            points: [{ x: width * (0.08 + Math.random() * 0.84), y: -10 }],
+            angle: Math.PI * 0.5 + (Math.random() - 0.5) * 0.45,
+            width: 3.2 + Math.random() * 2.0,
+            depth: 0,
+            maxLen: height * (0.36 + Math.random() * 0.4),
+            grown: 0,
+            rgbIdx: Math.floor(Math.random() * 3),
+            alpha: 0.88,
+            done: false,
+          });
         }
       }
 
@@ -1804,6 +2198,1305 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
         ctx.restore();
       }
 
+      // ================================================================
+      // 14. INK IN WATER (Billowing Smoke-Like Color Plumes & Curls)
+      // ================================================================
+      else if (mode === 'ink') {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < inkWisps.length; i++) {
+          const w = inkWisps[i];
+          w.life += step * (0.75 + energy * 0.65);
+          if (w.life >= w.maxLife) {
+            w.life = 0;
+            w.x = width * (0.18 + Math.random() * 0.64);
+            w.y = height * (0.18 + Math.random() * 0.64);
+            const ang = Math.random() * Math.PI * 2;
+            w.vx = Math.cos(ang) * (0.2 + Math.random() * 0.45);
+            w.vy = Math.sin(ang) * (0.2 + Math.random() * 0.45);
+            w.r = 20 + Math.random() * 35;
+          }
+          const prog = w.life / w.maxLife;
+          // Fluid curl trajectory
+          const curlAng = Math.sin(tSec * 0.45 + w.curlPhase + prog * 4.2) * 0.035;
+          const nvx = w.vx * Math.cos(curlAng) - w.vy * Math.sin(curlAng);
+          const nvy = w.vx * Math.sin(curlAng) + w.vy * Math.cos(curlAng);
+          w.vx = nvx;
+          w.vy = nvy;
+          w.x += w.vx * (1 + bass * 0.8) * step;
+          w.y += w.vy * (1 + bass * 0.8) * step;
+          w.rot += w.rotSpeed * step;
+
+          const curR = w.r + (w.maxR - w.r) * Math.pow(prog, 0.65) * (1 + bass * 0.16);
+          const fade = prog < 0.2 ? prog / 0.2 : Math.max(0, 1 - (prog - 0.2) / 0.8);
+          const rgb = getRgbByIdx(w.rgbIdx);
+
+          ctx.save();
+          ctx.translate(w.x, w.y);
+          ctx.rotate(w.rot);
+          // Multi-lobe billowing smoke/ink feather rather than a smooth sphere
+          for (let lobe = 0; lobe < 3; lobe++) {
+            const ox = Math.cos(lobe * 2.1 + w.curlPhase) * curR * 0.34;
+            const oy = Math.sin(lobe * 2.1 + w.curlPhase) * curR * 0.24;
+            const lr = curR * (0.65 + lobe * 0.14);
+            const g = ctx.createRadialGradient(ox, oy, lr * 0.06, ox, oy, lr);
+            g.addColorStop(0, `rgba(${rgb}, ${(fade * (0.28 + bass * 0.16)).toFixed(3)})`);
+            g.addColorStop(0.42, `rgba(${rgb}, ${(fade * 0.14).toFixed(3)})`);
+            g.addColorStop(0.78, `rgba(${c3}, ${(fade * 0.04).toFixed(3)})`);
+            g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.ellipse(ox, oy, lr * 1.25, lr * 0.72, lobe * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 15. BOKEH LIGHTS (Multi-Depth Out-of-Focus Photographic Lens Orbs)
+      // ================================================================
+      else if (mode === 'bokeh') {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < lensBokehs.length; i++) {
+          const bk = lensBokehs[i];
+          bk.x += (bk.vx + Math.sin(tSec * 0.3 + bk.phase) * 0.15) * step;
+          bk.y += bk.vy * (1 + bass * 0.55) * step;
+          if (bk.y < -bk.r * 1.4) {
+            bk.y = height + bk.r * 1.3;
+            bk.x = Math.random() * width;
+          }
+          if (bk.x < -bk.r * 1.4) bk.x = width + bk.r * 1.3;
+          if (bk.x > width + bk.r * 1.4) bk.x = -bk.r * 1.3;
+
+          const rgb = getRgbByIdx(bk.rgbIdx);
+          const breathe = 1 + bass * (0.08 + bk.depth * 0.1) + Math.sin(tSec * 0.8 + bk.phase) * 0.04;
+          const r = bk.r * breathe;
+          const a = bk.alpha * (0.82 + mids * 0.35);
+
+          // Photographic prime-lens bokeh disc (soft fill + subtly brighter optical rim)
+          const g = ctx.createRadialGradient(bk.x, bk.y, r * 0.1, bk.x, bk.y, r);
+          g.addColorStop(0, `rgba(${rgb}, ${(a * 0.42).toFixed(3)})`);
+          g.addColorStop(0.76, `rgba(${rgb}, ${(a * 0.52).toFixed(3)})`);
+          g.addColorStop(0.92, `rgba(255, 248, 240, ${(a * 0.65).toFixed(3)})`);
+          g.addColorStop(1, `rgba(${rgb}, 0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(bk.x, bk.y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 16. GRID / PERSPECTIVE TUNNEL (Infinite Geometric Wireframe)
+      // ================================================================
+      else if (mode === 'tunnel') {
+        const cx = width * 0.5 + Math.sin(tSec * 0.45) * (width * 0.05);
+        const cy = height * 0.5 + Math.cos(tSec * 0.38) * (height * 0.04);
+        const maxR = Math.hypot(width, height) * 0.68;
+        const sides = 8;
+        const ringCount = 16;
+        const travel = (tSec * (0.52 + energy * 0.42)) % 1;
+
+        // Vanishing point core glow
+        const core = ctx.createRadialGradient(cx, cy, 4, cx, cy, maxR * 0.42);
+        core.addColorStop(0, `rgba(${c1}, ${(0.34 + bass * 0.25).toFixed(3)})`);
+        core.addColorStop(0.5, `rgba(${c2}, ${(0.12 + mids * 0.08).toFixed(3)})`);
+        core.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = core;
+        ctx.fillRect(0, 0, width, height);
+
+        // Radial tunnel depth struts
+        const twistBase = tSec * 0.14;
+        ctx.lineWidth = 1.1;
+        for (let s = 0; s < sides; s++) {
+          const ang = (s / sides) * Math.PI * 2 + twistBase;
+          ctx.strokeStyle = `rgba(${s % 2 === 0 ? c1 : c2}, ${(0.22 + mids * 0.16).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * 14, cy + Math.sin(ang) * 14);
+          ctx.lineTo(cx + Math.cos(ang) * maxR, cy + Math.sin(ang) * maxR);
+          ctx.stroke();
+        }
+
+        // Advancing perspective octagonal wireframe rings
+        for (let i = 0; i < ringCount; i++) {
+          const z = (i + travel) / ringCount; // 0 far -> 1 near
+          const r = Math.pow(z, 2.35) * maxR;
+          if (r < 6) continue;
+          const rot = twistBase + (1 - z) * 0.35;
+          const alpha = Math.min(0.9, Math.pow(z, 1.1) * (0.55 + bass * 0.42));
+          ctx.strokeStyle = `rgba(${i % 2 === 0 ? c1 : c3}, ${alpha.toFixed(3)})`;
+          ctx.lineWidth = 0.8 + z * (1.8 + bass * 1.1);
+          ctx.beginPath();
+          for (let s = 0; s <= sides; s++) {
+            const ang = (s / sides) * Math.PI * 2 + rot;
+            const px = cx + Math.cos(ang) * r;
+            const py = cy + Math.sin(ang) * r;
+            if (s === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        }
+      }
+
+      // ================================================================
+      else if (mode === 'oilslick' && offCtx && offImg) {
+        const data = offImg.data;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const t = tSec * 0.45;
+        const shift = bass * 1.4;
+
+        for (let y = 0; y < offH; y++) {
+          const ny = (y / offH) * 3.4;
+          for (let x = 0; x < offW; x++) {
+            const nx = (x / offW) * 4.8;
+            // Thin-film optical thickness field
+            const thick =
+              Math.sin(nx + Math.cos(ny * 1.3 + t)) +
+              Math.cos(ny - Math.sin(nx * 1.1 - t * 0.8)) +
+              0.6 * Math.sin((nx + ny) * 1.2 + t * 0.65);
+            const phase = thick * 2.8 + shift;
+            // Pearlescent RGB thin-film interference curves
+            const ir = 0.5 + 0.5 * Math.cos(phase);
+            const ig = 0.5 + 0.5 * Math.cos(phase + 2.094);
+            const ib = 0.5 + 0.5 * Math.cos(phase + 4.188);
+            // Keep obsidian troughs dark so iridescent bands gleam cleanly
+            const sheen = Math.pow(0.5 + 0.5 * Math.sin(thick * 1.9 + t * 0.5), 1.8) * (0.58 + energy * 0.35);
+
+            const idx = (y * offW + x) * 4;
+            data[idx] = Math.min(255, (ir * 195 + r1 * 0.28) * sheen + 6);
+            data[idx + 1] = Math.min(255, (ig * 195 + g1 * 0.28) * sheen + 7);
+            data[idx + 2] = Math.min(255, (ib * 210 + b1 * 0.28) * sheen + 11);
+            data[idx + 3] = 235;
+          }
+        }
+        offCtx.putImageData(offImg, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, 0, width, height);
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 17. VINYL GROOVE SHEEN (Full-Screen Spinning Record + Reflection)
+      // ================================================================
+      else if (mode === 'vinyl') {
+        const cx = width * 0.5;
+        const cy = height * 0.5;
+        const discR = Math.hypot(width, height) * 0.56;
+
+        // Subtle dark vinyl base disc
+        const discBg = ctx.createRadialGradient(cx, cy, discR * 0.08, cx, cy, discR);
+        discBg.addColorStop(0, `rgba(${c1}, ${(0.26 + bass * 0.14).toFixed(3)})`);
+        discBg.addColorStop(0.16, '#0d0e14');
+        discBg.addColorStop(0.55, '#07080d');
+        discBg.addColorStop(1, '#030407');
+        ctx.fillStyle = discBg;
+        ctx.beginPath();
+        ctx.arc(cx, cy, discR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Concentric micro-grooves
+        const grooveStep = width < 768 ? 7 : 5.5;
+        for (let r = discR * 0.18; r < discR; r += grooveStep) {
+          const bandMod = 0.55 + 0.45 * Math.sin(r * 0.075);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${(0.035 + bandMod * 0.045 + mids * 0.02).toFixed(3)})`;
+          ctx.lineWidth = 0.9;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Slow-spinning anisotropic diagonal light reflection sheen (classic vinyl shimmer)
+        const sheenAngle = tSec * 0.24;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(sheenAngle);
+        ctx.globalCompositeOperation = 'screen';
+        for (let half = 0; half < 2; half++) {
+          ctx.save();
+          ctx.rotate(half * Math.PI);
+          const sheenGrad = ctx.createLinearGradient(-discR * 0.28, -discR, discR * 0.28, 0);
+          sheenGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+          sheenGrad.addColorStop(0.35, `rgba(${c1}, ${(0.12 + bass * 0.1).toFixed(3)})`);
+          sheenGrad.addColorStop(0.5, `rgba(255, 255, 255, ${(0.16 + bass * 0.12).toFixed(3)})`);
+          sheenGrad.addColorStop(0.65, `rgba(${c2}, ${(0.1 + mids * 0.08).toFixed(3)})`);
+          sheenGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          ctx.fillStyle = sheenGrad;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.arc(0, 0, discR, -Math.PI * 0.62, -Math.PI * 0.38);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.restore();
+
+        // Center record label tinted by song colors + spindle hole
+        const labelR = Math.min(width, height) * 0.12;
+        const labelG = ctx.createRadialGradient(cx, cy, 4, cx, cy, labelR);
+        labelG.addColorStop(0, `rgba(${c3}, ${(0.55 + bass * 0.2).toFixed(3)})`);
+        labelG.addColorStop(0.65, `rgba(${c1}, ${(0.42 + bass * 0.16).toFixed(3)})`);
+        labelG.addColorStop(1, `rgba(${c2}, 0.25)`);
+        ctx.fillStyle = labelG;
+        ctx.beginPath();
+        ctx.arc(cx, cy, labelR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255, 255, 255, 0.22)`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#040508';
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(5, labelR * 0.12), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ================================================================
+      // 18. OSCILLOSCOPE / WAVEFORM (Crisp Glowing Trace + Circular Ring)
+      // ================================================================
+      else if (mode === 'oscilloscope') {
+        const cx = width * 0.5;
+        const cy = height * 0.5;
+
+        // Subtle phosphor calibration grid
+        ctx.strokeStyle = `rgba(${c1}, 0.055)`;
+        ctx.lineWidth = 1;
+        const gridGap = 48;
+        for (let x = cx % gridGap; x < width; x += gridGap) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+        for (let y = cy % gridGap; y < height; y += gridGap) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+
+        // Circular frequency ring in the background
+        const ringR = Math.min(width, height) * 0.28;
+        ctx.save();
+        ctx.beginPath();
+        const ringPts = 96;
+        for (let i = 0; i <= ringPts; i++) {
+          const a = (i / ringPts) * Math.PI * 2;
+          const bin = Math.floor(((i % ringPts) / ringPts) * 40);
+          const amp = playing && analyser
+            ? (freqBuf[bin] / 255) * (46 + bass * 28)
+            : (Math.sin(a * 4 + tSec * 2.2) * 14 + Math.cos(a * 7 - tSec * 1.8) * 10) * (playing ? 1 : 0.25);
+          const rr = ringR + amp;
+          const rx = cx + Math.cos(a) * rr;
+          const ry = cy + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(rx, ry);
+          else ctx.lineTo(rx, ry);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = `rgba(${c2}, ${(0.22 + mids * 0.25).toFixed(3)})`;
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(${c2}, ${(0.65 + mids * 0.3).toFixed(3)})`;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.restore();
+
+        // Central glowing live waveform trace
+        ctx.beginPath();
+        const samples = 128;
+        for (let i = 0; i < samples; i++) {
+          const x = (i / (samples - 1)) * width;
+          let norm = 0;
+          if (playing && analyser) {
+            norm = (timeBuf[i] - 128) / 128;
+          } else if (playing) {
+            norm =
+              Math.sin(i * 0.18 + tSec * 4.5) * 0.35 +
+              Math.cos(i * 0.31 - tSec * 3.1) * 0.22 * (0.5 + bass);
+          } else {
+            norm = Math.sin(i * 0.14 + tSec * 1.4) * 0.08;
+          }
+          const env = Math.sin((i / (samples - 1)) * Math.PI);
+          const y = cy + norm * (height * 0.26) * (0.35 + env * 0.65);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = `rgba(${c1}, ${(0.28 + bass * 0.28).toFixed(3)})`;
+        ctx.lineWidth = 8;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(${c1}, 0.92)`;
+        ctx.lineWidth = 2.4;
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+      }
+
+      // ================================================================
+      // 19. VU METER / SPECTRUM COLUMNS (Giant Ambient Equalizer Pillars)
+      // ================================================================
+      else if (mode === 'vumeter') {
+        const cols = width < 768 ? 16 : 28;
+        const gap = width < 768 ? 6 : 10;
+        const colW = (width - gap * (cols + 1)) / cols;
+
+        for (let i = 0; i < cols; i++) {
+          const bin = Math.min(63, Math.floor((i / cols) * 44));
+          let target = 0.08;
+          if (playing && analyser) {
+            target = Math.min(0.92, (freqBuf[bin] / 255) * 0.95);
+          } else if (playing) {
+            target =
+              0.16 +
+              0.38 * Math.abs(Math.sin(tSec * 2.4 + i * 0.42)) +
+              0.22 * Math.abs(Math.cos(tSec * 3.7 - i * 0.28));
+          } else {
+            target = 0.08 + 0.05 * Math.sin(tSec * 1.2 + i * 0.5);
+          }
+
+          // Smooth attack & calm decay
+          const riseRate = Math.min(1, dt * 10);
+          const fallRate = Math.min(1, dt * 3.8);
+          vuLevels[i] += (target - vuLevels[i]) * (target > vuLevels[i] ? riseRate : fallRate);
+          if (vuLevels[i] > vuPeaks[i]) vuPeaks[i] = vuLevels[i];
+          else vuPeaks[i] = Math.max(vuLevels[i], vuPeaks[i] - dt * 0.28);
+
+          const x = gap + i * (colW + gap);
+          const barH = vuLevels[i] * height * 0.84;
+          const y = height - barH;
+          const rgb = i % 3 === 0 ? c1 : i % 3 === 1 ? c2 : c3;
+
+          const grad = ctx.createLinearGradient(x, height, x, y);
+          grad.addColorStop(0, `rgba(${rgb}, 0.08)`);
+          grad.addColorStop(0.55, `rgba(${rgb}, ${(0.24 + vuLevels[i] * 0.2).toFixed(3)})`);
+          grad.addColorStop(1, `rgba(${rgb}, ${(0.52 + vuLevels[i] * 0.25).toFixed(3)})`);
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, y, colW, barH);
+
+          // Glowing peak-hold cap
+          const peakY = height - vuPeaks[i] * height * 0.84;
+          ctx.fillStyle = `rgba(255, 255, 255, ${(0.35 + vuPeaks[i] * 0.45).toFixed(3)})`;
+          ctx.fillRect(x, peakY - 3, colW, 3);
+        }
+      }
+
+      // ================================================================
+      // 20. KALEIDOSCOPE / STAINED GLASS (Rotating Glowing Facets)
+      // ================================================================
+      else if (mode === 'kaleidoscope') {
+        const cx = width * 0.5;
+        const cy = height * 0.5;
+        const maxR = Math.hypot(width, height) * 0.65;
+        const wedges = 12;
+        const baseRot = tSec * 0.12;
+        const rings = [0.16, 0.34, 0.56, 0.82, 1.05];
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        for (let rIdx = 0; rIdx < rings.length - 1; rIdx++) {
+          const r1 = maxR * rings[rIdx] * (1 + bass * 0.08 * (rIdx % 2 === 0 ? 1 : -0.5));
+          const r2 = maxR * rings[rIdx + 1] * (1 + bass * 0.08 * ((rIdx + 1) % 2 === 0 ? 1 : -0.5));
+          const dir = rIdx % 2 === 0 ? 1 : -1;
+          const rot = baseRot * dir * (1 + rIdx * 0.22);
+
+          for (let w = 0; w < wedges; w++) {
+            const a1 = (w / wedges) * Math.PI * 2 + rot;
+            const a2 = ((w + 1) / wedges) * Math.PI * 2 + rot;
+            const aMid = (a1 + a2) * 0.5 + Math.sin(tSec * 0.6 + rIdx) * 0.08;
+            const rgb = getRgbByIdx((w + rIdx) % 3);
+            const alpha = 0.14 + ((w + rIdx) % 3) * 0.06 + bass * 0.14;
+
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a1) * r1, Math.sin(a1) * r1);
+            ctx.lineTo(Math.cos(aMid) * r2, Math.sin(aMid) * r2);
+            ctx.lineTo(Math.cos(a2) * r1, Math.sin(a2) * r1);
+            ctx.closePath();
+
+            ctx.fillStyle = `rgba(${rgb}, ${alpha.toFixed(3)})`;
+            ctx.fill();
+            ctx.strokeStyle = `rgba(255, 255, 255, ${(0.18 + mids * 0.24).toFixed(3)})`;
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 21. VORONOI / CELLULAR (Interlocking Organic Cell Membranes)
+      // ================================================================
+      else if (mode === 'voronoi') {
+        for (let i = 0; i < voronoiSites.length; i++) {
+          const s = voronoiSites[i];
+          s.x += s.vx * (1 + energy * 1.1) * step;
+          s.y += s.vy * (1 + energy * 1.1) * step;
+          if (s.x < 0) {
+            s.x = 0;
+            s.vx = Math.abs(s.vx);
+          } else if (s.x > width) {
+            s.x = width;
+            s.vx = -Math.abs(s.vx);
+          }
+          if (s.y < 0) {
+            s.y = 0;
+            s.vy = Math.abs(s.vy);
+          } else if (s.y > height) {
+            s.y = height;
+            s.vy = -Math.abs(s.vy);
+          }
+        }
+
+        const bounds = [
+          { x: -10, y: -10 },
+          { x: width + 10, y: -10 },
+          { x: width + 10, y: height + 10 },
+          { x: -10, y: height + 10 },
+        ];
+
+        for (let i = 0; i < voronoiSites.length; i++) {
+          const si = voronoiSites[i];
+          let poly = bounds;
+          for (let j = 0; j < voronoiSites.length; j++) {
+            if (i === j) continue;
+            const sj = voronoiSites[j];
+            const mx = (si.x + sj.x) * 0.5;
+            const my = (si.y + sj.y) * 0.5;
+            const nx = sj.x - si.x;
+            const ny = sj.y - si.y;
+            poly = clipPolygonHalfPlane(poly, mx, my, nx, ny);
+            if (poly.length < 3) break;
+          }
+          if (poly.length < 3) continue;
+
+          const rgb = getRgbByIdx(si.rgbIdx);
+          ctx.beginPath();
+          ctx.moveTo(poly[0].x, poly[0].y);
+          for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k].x, poly[k].y);
+          ctx.closePath();
+
+          // Soft iridescent cell interior
+          const cellG = ctx.createRadialGradient(si.x, si.y, 4, si.x, si.y, Math.min(width, height) * 0.24);
+          cellG.addColorStop(0, `rgba(${rgb}, ${(0.24 + bass * 0.18).toFixed(3)})`);
+          cellG.addColorStop(0.7, `rgba(${rgb}, ${(0.08 + mids * 0.08).toFixed(3)})`);
+          cellG.addColorStop(1, `rgba(${rgb}, 0.02)`);
+          ctx.fillStyle = cellG;
+          ctx.fill();
+
+          // Crisp glowing cell membrane wall
+          ctx.strokeStyle = `rgba(${rgb}, ${(0.42 + bass * 0.32).toFixed(3)})`;
+          ctx.lineWidth = 2.0;
+          ctx.stroke();
+
+          ctx.strokeStyle = `rgba(255, 255, 255, ${(0.18 + mids * 0.16).toFixed(3)})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
+
+      // ================================================================
+      else if (mode === 'oilslick' && offCtx && offImg) {
+        const data = offImg.data;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const t = tSec * 0.45;
+        const shift = bass * 1.4;
+
+        for (let y = 0; y < offH; y++) {
+          const ny = (y / offH) * 3.4;
+          for (let x = 0; x < offW; x++) {
+            const nx = (x / offW) * 4.8;
+            // Thin-film optical thickness field
+            const thick =
+              Math.sin(nx + Math.cos(ny * 1.3 + t)) +
+              Math.cos(ny - Math.sin(nx * 1.1 - t * 0.8)) +
+              0.6 * Math.sin((nx + ny) * 1.2 + t * 0.65);
+            const phase = thick * 2.8 + shift;
+            // Pearlescent RGB thin-film interference curves
+            const ir = 0.5 + 0.5 * Math.cos(phase);
+            const ig = 0.5 + 0.5 * Math.cos(phase + 2.094);
+            const ib = 0.5 + 0.5 * Math.cos(phase + 4.188);
+            // Keep obsidian troughs dark so iridescent bands gleam cleanly
+            const sheen = Math.pow(0.5 + 0.5 * Math.sin(thick * 1.9 + t * 0.5), 1.8) * (0.58 + energy * 0.35);
+
+            const idx = (y * offW + x) * 4;
+            data[idx] = Math.min(255, (ir * 195 + r1 * 0.28) * sheen + 6);
+            data[idx + 1] = Math.min(255, (ig * 195 + g1 * 0.28) * sheen + 7);
+            data[idx + 2] = Math.min(255, (ib * 210 + b1 * 0.28) * sheen + 11);
+            data[idx + 3] = 235;
+          }
+        }
+        offCtx.putImageData(offImg, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, 0, width, height);
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 22. CRT / SCANLINES & APERTURE GRILLE (Retro Display Texture)
+      // ================================================================
+      else if (mode === 'crt') {
+        // Warm phosphor center glow tinted by song colors
+        const phos = ctx.createRadialGradient(
+          width * 0.5,
+          height * 0.5,
+          20,
+          width * 0.5,
+          height * 0.5,
+          Math.max(width, height) * 0.65
+        );
+        phos.addColorStop(0, `rgba(${c1}, ${(0.24 + bass * 0.16).toFixed(3)})`);
+        phos.addColorStop(0.55, `rgba(${c2}, ${(0.12 + mids * 0.08).toFixed(3)})`);
+        phos.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = phos;
+        ctx.fillRect(0, 0, width, height);
+
+        // Subtle vertical RGB aperture grille sub-pixel stripes
+        const stripeStep = 6;
+        for (let x = 0; x < width; x += stripeStep) {
+          ctx.fillStyle = 'rgba(255, 70, 70, 0.035)';
+          ctx.fillRect(x, 0, 2, height);
+          ctx.fillStyle = 'rgba(70, 255, 110, 0.03)';
+          ctx.fillRect(x + 2, 0, 2, height);
+          ctx.fillStyle = 'rgba(70, 140, 255, 0.035)';
+          ctx.fillRect(x + 4, 0, 2, height);
+        }
+
+        // Crisp horizontal CRT scanlines
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+        for (let y = 0; y < height; y += 4) {
+          ctx.fillRect(0, y, width, 1.8);
+        }
+
+        // Gentle scrolling vertical sync refresh bar
+        const syncY = ((tSec * 85) % (height + 160)) - 80;
+        const syncGrad = ctx.createLinearGradient(0, syncY - 45, 0, syncY + 45);
+        syncGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        syncGrad.addColorStop(0.5, `rgba(${c3}, ${(0.1 + bass * 0.12).toFixed(3)})`);
+        syncGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = syncGrad;
+        ctx.fillRect(0, syncY - 45, width, 90);
+
+        // Curved CRT tube edge vignette
+        const vig = ctx.createRadialGradient(
+          width * 0.5,
+          height * 0.5,
+          Math.min(width, height) * 0.35,
+          width * 0.5,
+          height * 0.5,
+          Math.hypot(width, height) * 0.58
+        );
+        vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        vig.addColorStop(0.72, 'rgba(0, 0, 0, 0.25)');
+        vig.addColorStop(1, 'rgba(0, 0, 0, 0.78)');
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // ================================================================
+      // 23. TOPOGRAPHIC CONTOUR (Animated Morphing Elevation Map Lines)
+      // ================================================================
+      else if (mode === 'topographic') {
+        const cols = width < 768 ? 28 : 42;
+        const rows = width < 768 ? 20 : 28;
+        const cw = width / cols;
+        const ch = height / rows;
+        const needed = (cols + 1) * (rows + 1);
+        if (topoField.length < needed) topoField = new Float32Array(needed);
+        const field = topoField;
+
+        const t1 = tSec * 0.38;
+        const t2 = tSec * 0.24;
+        const swell = 1 + bass * 0.32;
+
+        for (let gy = 0; gy <= rows; gy++) {
+          const ny = (gy / rows) * 4.2;
+          for (let gx = 0; gx <= cols; gx++) {
+            const nx = (gx / cols) * 5.2;
+            const v =
+              Math.sin(nx + t1) * Math.cos(ny - t2) +
+              0.65 * Math.sin(nx * 1.7 - ny * 1.2 + t2 * 1.3) +
+              0.4 * Math.cos((nx + ny) * 1.4 - t1 * 0.9);
+            field[gy * (cols + 1) + gx] = v * swell;
+          }
+        }
+
+        const levels = [-1.2, -0.75, -0.3, 0.15, 0.6, 1.05, 1.45];
+        ctx.lineCap = 'round';
+        for (let l = 0; l < levels.length; l++) {
+          const iso = levels[l];
+          const isMajor = l % 2 === 1;
+          const rgb = l >= 4 ? c3 : l >= 2 ? c1 : c2;
+          ctx.strokeStyle = `rgba(${rgb}, ${(isMajor ? 0.48 + bass * 0.3 : 0.24 + mids * 0.18).toFixed(3)})`;
+          ctx.lineWidth = isMajor ? 1.8 : 1.0;
+          ctx.beginPath();
+
+          for (let gy = 0; gy < rows; gy++) {
+            for (let gx = 0; gx < cols; gx++) {
+              const i00 = gy * (cols + 1) + gx;
+              const v0 = field[i00];
+              const v1 = field[i00 + 1];
+              const v2 = field[i00 + cols + 2];
+              const v3 = field[i00 + cols + 1];
+
+              const pts: { x: number; y: number }[] = [];
+              const x0 = gx * cw;
+              const y0 = gy * ch;
+              if ((v0 < iso) !== (v1 < iso)) {
+                pts.push({ x: x0 + ((iso - v0) / (v1 - v0)) * cw, y: y0 });
+              }
+              if ((v1 < iso) !== (v2 < iso)) {
+                pts.push({ x: x0 + cw, y: y0 + ((iso - v1) / (v2 - v1)) * ch });
+              }
+              if ((v2 < iso) !== (v3 < iso)) {
+                pts.push({ x: x0 + (1 - (iso - v2) / (v3 - v2)) * cw, y: y0 + ch });
+              }
+              if ((v3 < iso) !== (v0 < iso)) {
+                pts.push({ x: x0, y: y0 + (1 - (iso - v3) / (v0 - v3)) * ch });
+              }
+              if (pts.length >= 2) {
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
+                if (pts.length === 4) {
+                  ctx.moveTo(pts[2].x, pts[2].y);
+                  ctx.lineTo(pts[3].x, pts[3].y);
+                }
+              }
+            }
+          }
+          ctx.stroke();
+        }
+      }
+
+      // ================================================================
+      // 24. LASER HARP / STAGE BEAMS (Concert Spotlights & Laser Planes)
+      // ================================================================
+      else if (mode === 'laser') {
+        // Soft stage haze in upper half
+        const haze = ctx.createRadialGradient(width * 0.5, 0, 20, width * 0.5, height * 0.35, Math.max(width, height) * 0.7);
+        haze.addColorStop(0, `rgba(${c1}, ${(0.12 + bass * 0.1).toFixed(3)})`);
+        haze.addColorStop(0.6, `rgba(${c2}, ${(0.06 + mids * 0.05).toFixed(3)})`);
+        haze.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = haze;
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const origins = [
+          { x: 0, y: 0, baseAng: 0.42 },
+          { x: width, y: 0, baseAng: Math.PI - 0.42 },
+        ];
+        const beamPerSide = width < 768 ? 5 : 7;
+        const beamLen = Math.hypot(width, height) * 1.15;
+
+        for (let side = 0; side < 2; side++) {
+          const orig = origins[side];
+          const dirSign = side === 0 ? 1 : -1;
+          for (let b = 0; b < beamPerSide; b++) {
+            const sweep = Math.sin(tSec * (0.65 + b * 0.14) + side * 2.1 + b) * (0.28 + bass * 0.16);
+            const ang = orig.baseAng + dirSign * ((b / (beamPerSide - 1)) * 0.78 - 0.2) + sweep;
+            const rgb = getRgbByIdx((b + side) % 3);
+            const ex = orig.x + Math.cos(ang) * beamLen;
+            const ey = orig.y + Math.sin(ang) * beamLen;
+            const spread = 0.032 + bass * 0.018;
+
+            // Volumetric cone beam
+            const coneGrad = ctx.createLinearGradient(orig.x, orig.y, ex, ey);
+            coneGrad.addColorStop(0, `rgba(${rgb}, ${(0.34 + bass * 0.24).toFixed(3)})`);
+            coneGrad.addColorStop(0.55, `rgba(${rgb}, ${(0.11 + mids * 0.08).toFixed(3)})`);
+            coneGrad.addColorStop(1, `rgba(${rgb}, 0)`);
+            ctx.fillStyle = coneGrad;
+            ctx.beginPath();
+            ctx.moveTo(orig.x, orig.y);
+            ctx.lineTo(orig.x + Math.cos(ang - spread) * beamLen, orig.y + Math.sin(ang - spread) * beamLen);
+            ctx.lineTo(orig.x + Math.cos(ang + spread) * beamLen, orig.y + Math.sin(ang + spread) * beamLen);
+            ctx.closePath();
+            ctx.fill();
+
+            // Razor-sharp laser core line
+            ctx.strokeStyle = `rgba(255, 255, 255, ${(0.28 + bass * 0.4).toFixed(3)})`;
+            ctx.lineWidth = 1.1;
+            ctx.beginPath();
+            ctx.moveTo(orig.x, orig.y);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 25. CYBERNETIC CIRCUITRY / PCB TRACES (45-Degree Glowing Pathways)
+      // ================================================================
+      else if (mode === 'circuit') {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        for (let i = 0; i < circuitTraces.length; i++) {
+          const tr = circuitTraces[i];
+          const rgb = getRgbByIdx(tr.rgbIdx);
+          tr.pulsePos = (tr.pulsePos + tr.pulseSpeed * dt * (1 + bass * 1.4)) % 1;
+
+          // Base copper/neon PCB pathway
+          ctx.beginPath();
+          ctx.moveTo(tr.pts[0].x, tr.pts[0].y);
+          for (let p = 1; p < tr.pts.length; p++) ctx.lineTo(tr.pts[p].x, tr.pts[p].y);
+          ctx.strokeStyle = `rgba(${rgb}, ${(0.14 + mids * 0.1).toFixed(3)})`;
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+
+          // Solder pad nodes at start & end
+          const start = tr.pts[0];
+          const end = tr.pts[tr.pts.length - 1];
+          ctx.fillStyle = `rgba(${rgb}, ${(0.26 + bass * 0.25).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(start.x, start.y, 3.2, 0, Math.PI * 2);
+          ctx.arc(end.x, end.y, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Traveling luminous data pulse along segments
+          const segCount = tr.pts.length - 1;
+          const exactSeg = tr.pulsePos * segCount;
+          const segIdx = Math.min(segCount - 1, Math.floor(exactSeg));
+          const segT = exactSeg - segIdx;
+          const pA = tr.pts[segIdx];
+          const pB = tr.pts[segIdx + 1];
+          const px = pA.x + (pB.x - pA.x) * segT;
+          const py = pA.y + (pB.y - pA.y) * segT;
+
+          const pg = ctx.createRadialGradient(px, py, 0.5, px, py, 14 + bass * 10);
+          pg.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+          pg.addColorStop(0.35, `rgba(${rgb}, ${(0.75 + bass * 0.2).toFixed(3)})`);
+          pg.addColorStop(1, `rgba(${rgb}, 0)`);
+          ctx.fillStyle = pg;
+          ctx.beginPath();
+          ctx.arc(px, py, 14 + bass * 10, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // ================================================================
+      // 26. ORIGAMI / LOW-POLY MESH (3D Lit Flat Triangular Facets)
+      // ================================================================
+      else if (mode === 'origami') {
+        const cols = width < 768 ? 9 : 14;
+        const rows = width < 768 ? 7 : 10;
+        const cw = width / cols;
+        const ch = height / rows;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const [r2, g2, b2] = colorsRef.current.c2Tuple;
+
+        const getZ = (gx: number, gy: number) =>
+          (Math.sin(gx * 0.85 + tSec * 0.75) * Math.cos(gy * 0.9 - tSec * 0.55) +
+            0.5 * Math.sin((gx + gy) * 0.65 + tSec * 0.45)) *
+          (28 + bass * 32);
+
+        const drawTri = (
+          x1: number, y1: number, z1: number,
+          x2: number, y2: number, z2: number,
+          x3: number, y3: number, z3: number,
+          alt: boolean
+        ) => {
+          // 3D cross product normal for flat-shaded directional lighting
+          const ux = x2 - x1, uy = y2 - y1, uz = z2 - z1;
+          const vx = x3 - x1, vy = y3 - y1, vz = z3 - z1;
+          const nx = uy * vz - uz * vy;
+          const ny = uz * vx - ux * vz;
+          const nz = ux * vy - uy * vx;
+          const nLen = Math.hypot(nx, ny, nz) || 1;
+          // Light direction drifting softly
+          const lx = Math.cos(tSec * 0.3) * 0.55;
+          const ly = Math.sin(tSec * 0.25) * 0.45;
+          const lz = 0.75;
+          const dot = Math.max(0.08, Math.min(1, (nx * lx + ny * ly + nz * lz) / nLen));
+
+          const shade = 0.14 + dot * (0.48 + bass * 0.24);
+          const rr = Math.floor((alt ? r1 : r2) * shade);
+          const gg = Math.floor((alt ? g1 : g2) * shade);
+          const bb = Math.floor((alt ? b1 : b2) * shade);
+
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.lineTo(x3, y3);
+          ctx.closePath();
+          ctx.fillStyle = `rgba(${rr}, ${gg}, ${bb}, 0.78)`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(255, 255, 255, ${(0.06 + dot * 0.14).toFixed(3)})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        };
+
+        for (let gy = 0; gy < rows; gy++) {
+          for (let gx = 0; gx < cols; gx++) {
+            const x0 = gx * cw, y0 = gy * ch;
+            const x1 = x0 + cw, y1 = y0 + ch;
+            const z00 = getZ(gx, gy);
+            const z10 = getZ(gx + 1, gy);
+            const z11 = getZ(gx + 1, gy + 1);
+            const z01 = getZ(gx, gy + 1);
+            drawTri(x0, y0, z00, x1, y0, z10, x1, y1, z11, (gx + gy) % 2 === 0);
+            drawTri(x0, y0, z00, x1, y1, z11, x0, y1, z01, (gx + gy) % 2 !== 0);
+          }
+        }
+      }
+
+      // ================================================================
+      // 27. SOLARIZED THERMAL / INFRARED (Heat-Map Plumes in Cover Hues)
+      // ================================================================
+      else if (mode === 'thermal' && offCtx && offImg) {
+        const data = offImg.data;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const [r2, g2, b2] = colorsRef.current.c2Tuple;
+        const [r3, g3, b3] = colorsRef.current.c3Tuple;
+        const tA = tSec * 0.55;
+        const tB = tSec * 0.38;
+
+        for (let y = 0; y < offH; y++) {
+          const ny = (y / offH) * 3.8;
+          for (let x = 0; x < offW; x++) {
+            const nx = (x / offW) * 5.0;
+            const heat =
+              0.5 +
+              0.24 * Math.sin(nx + tA + Math.sin(ny * 1.3 - tB)) +
+              0.18 * Math.cos(ny * 1.6 - tA * 0.8 + Math.cos(nx * 1.1 + tB)) +
+              0.12 * Math.sin((nx - ny) * 1.5 + tB * 1.4) +
+              bass * 0.14;
+            const h = Math.max(0, Math.min(1, heat));
+            // Stark 4-stop thermal camera ramp using cover art hues
+            let rr = 0, gg = 0, bb = 0;
+            if (h < 0.35) {
+              const k = h / 0.35;
+              rr = r2 * k * 0.35;
+              gg = g2 * k * 0.35;
+              bb = b2 * k * 0.55;
+            } else if (h < 0.65) {
+              const k = (h - 0.35) / 0.3;
+              rr = r2 * 0.35 * (1 - k) + r1 * k;
+              gg = g2 * 0.35 * (1 - k) + g1 * k;
+              bb = b2 * 0.55 * (1 - k) + b1 * k;
+            } else if (h < 0.86) {
+              const k = (h - 0.65) / 0.21;
+              rr = r1 * (1 - k) + r3 * k;
+              gg = g1 * (1 - k) + g3 * k;
+              bb = b1 * (1 - k) + b3 * k;
+            } else {
+              const k = (h - 0.86) / 0.14;
+              rr = r3 * (1 - k) + 255 * k;
+              gg = g3 * (1 - k) + 250 * k;
+              bb = b3 * (1 - k) + 220 * k;
+            }
+            const idx = (y * offW + x) * 4;
+            data[idx] = rr;
+            data[idx + 1] = gg;
+            data[idx + 2] = bb;
+            data[idx + 3] = 215;
+          }
+        }
+        offCtx.putImageData(offImg, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, 0, width, height);
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 28. REACTION-DIFFUSION (TURING PATTERNS) (Gray-Scott Coral/Zebra)
+      // ================================================================
+      else if (mode === 'turing' && offCtx && offImg) {
+        const dA = 1.0;
+        const dB = 0.5;
+        const feed = 0.037 + mids * 0.008;
+        const kill = 0.06 + bass * 0.004;
+        const subSteps = Math.max(1, Math.min(5, Math.round(3 * (colorsRef.current.speed || 1))));
+
+        // Occasionally inject fresh seed on strong bass beat so pattern never stagnates
+        if (playing && bass > 0.65 && Math.random() < dt * 1.2) {
+          const sx = 4 + Math.floor(Math.random() * (rdW - 8));
+          const sy = 4 + Math.floor(Math.random() * (rdH - 8));
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              rdB[(sy + dy) * rdW + (sx + dx)] = 1;
+            }
+          }
+        }
+
+        for (let st = 0; st < subSteps; st++) {
+          for (let y = 1; y < rdH - 1; y++) {
+            const row = y * rdW;
+            for (let x = 1; x < rdW - 1; x++) {
+              const i = row + x;
+              const a = rdA[i];
+              const b = rdB[i];
+              const lapA =
+                (rdA[i - 1] + rdA[i + 1] + rdA[i - rdW] + rdA[i + rdW]) * 0.2 +
+                (rdA[i - rdW - 1] + rdA[i - rdW + 1] + rdA[i + rdW - 1] + rdA[i + rdW + 1]) * 0.05 -
+                a;
+              const lapB =
+                (rdB[i - 1] + rdB[i + 1] + rdB[i - rdW] + rdB[i + rdW]) * 0.2 +
+                (rdB[i - rdW - 1] + rdB[i - rdW + 1] + rdB[i + rdW - 1] + rdB[i + rdW + 1]) * 0.05 -
+                b;
+              const abb = a * b * b;
+              rdA2[i] = Math.max(0, Math.min(1, a + (dA * lapA - abb + feed * (1 - a))));
+              rdB2[i] = Math.max(0, Math.min(1, b + (dB * lapB + abb - (kill + feed) * b)));
+            }
+          }
+          const tmpA = rdA; rdA = rdA2; rdA2 = tmpA;
+          const tmpB = rdB; rdB = rdB2; rdB2 = tmpB;
+        }
+
+        const data = offImg.data;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const [r2, g2, b2] = colorsRef.current.c2Tuple;
+        for (let i = 0; i < rdSize; i++) {
+          const v = Math.min(1, Math.max(0, (rdA[i] - rdB[i] * 1.45)));
+          const inv = 1 - v;
+          const p = i * 4;
+          data[p] = r1 * inv + r2 * v * 0.22;
+          data[p + 1] = g1 * inv + g2 * v * 0.22;
+          data[p + 2] = b1 * inv + b2 * v * 0.28;
+          data[p + 3] = 225;
+        }
+        offCtx.putImageData(offImg, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, 0, width, height);
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 29. MOIRÉ INTERFERENCE (Overlapping Rotating Optical Ring Grids)
+      // ================================================================
+      else if (mode === 'moire') {
+        const cx = width * 0.5;
+        const cy = height * 0.5;
+        const orbitR = Math.min(width, height) * (0.12 + bass * 0.05);
+        const maxR = Math.hypot(width, height) * 0.72;
+        const ringGap = width < 768 ? 13 : 11;
+
+        const cA = { x: cx + Math.cos(tSec * 0.42) * orbitR, y: cy + Math.sin(tSec * 0.35) * orbitR };
+        const cB = { x: cx - Math.cos(tSec * 0.31) * orbitR, y: cy - Math.sin(tSec * 0.48) * orbitR };
+
+        ctx.lineWidth = 1.3;
+        ctx.strokeStyle = `rgba(${c1}, ${(0.32 + bass * 0.24).toFixed(3)})`;
+        ctx.beginPath();
+        for (let r = ringGap; r < maxR; r += ringGap) {
+          ctx.moveTo(cA.x + r, cA.y);
+          ctx.arc(cA.x, cA.y, r, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(${c2}, ${(0.32 + mids * 0.24).toFixed(3)})`;
+        ctx.beginPath();
+        for (let r = ringGap; r < maxR; r += ringGap) {
+          ctx.moveTo(cB.x + r, cB.y);
+          ctx.arc(cB.x, cB.y, r, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+      }
+
+      // ================================================================
+      // 30. ASCII / HALFTONE MATRIX (Live Pulsing Typographic & Dot Grid)
+      // ================================================================
+      else if (mode === 'halftone') {
+        const cell = width < 768 ? 22 : 24;
+        const chars = '·:+*#@';
+        ctx.font = `bold ${Math.floor(cell * 0.62)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const cols = Math.ceil(width / cell);
+        const rows = Math.ceil(height / cell);
+        for (let gy = 0; gy < rows; gy++) {
+          const y = gy * cell + cell * 0.5;
+          for (let gx = 0; gx < cols; gx++) {
+            const x = gx * cell + cell * 0.5;
+            const wave =
+              0.5 +
+              0.3 * Math.sin(gx * 0.28 + tSec * 1.4 + Math.cos(gy * 0.22 - tSec * 0.8)) +
+              0.2 * Math.cos((gx - gy) * 0.25 - tSec * 1.1);
+            const val = Math.max(0, Math.min(1, wave * (0.65 + bass * 0.65)));
+            const rgb = (gx + gy) % 3 === 0 ? c1 : (gx + gy) % 3 === 1 ? c2 : c3;
+
+            // Halftone background dot + crisp ASCII glyph
+            const dotR = val * cell * 0.34;
+            ctx.fillStyle = `rgba(${rgb}, ${(0.12 + val * 0.22).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(x, y, dotR, 0, Math.PI * 2);
+            ctx.fill();
+
+            const ch = chars[Math.min(chars.length - 1, Math.floor(val * chars.length))];
+            ctx.fillStyle = `rgba(${rgb}, ${(0.28 + val * 0.55).toFixed(3)})`;
+            ctx.fillText(ch, x, y);
+          }
+        }
+      }
+
+      // ================================================================
+      // 31. PIXEL SORT / GLITCH MELT (Melting Vertical Color Columns)
+      // ================================================================
+      else if (mode === 'pixelsort') {
+        for (let i = 0; i < meltCols.length; i++) {
+          const mc = meltCols[i];
+          mc.dripY += mc.speed * (1 + bass * 2.2) * step;
+          if (mc.dripY > height + 260) {
+            mc.dripY = -80 - Math.random() * 140;
+          }
+          const rgb = getRgbByIdx(mc.rgbIdx);
+          const streakLen = height * (0.35 + 0.35 * Math.sin(mc.phase + tSec * 0.45) + bass * 0.22);
+          const grad = ctx.createLinearGradient(mc.x, mc.dripY - streakLen, mc.x, mc.dripY);
+          grad.addColorStop(0, `rgba(${rgb}, 0)`);
+          grad.addColorStop(0.55, `rgba(${rgb}, ${(mc.alpha * 0.65).toFixed(3)})`);
+          grad.addColorStop(0.92, `rgba(${rgb}, ${(mc.alpha * 1.25).toFixed(3)})`);
+          grad.addColorStop(1, `rgba(255, 255, 255, ${(mc.alpha * 0.85).toFixed(3)})`);
+          ctx.fillStyle = grad;
+          ctx.fillRect(mc.x, mc.dripY - streakLen, mc.w, streakLen);
+        }
+
+        // Occasional subtle digital tape horizontal glitch slice on bass hits
+        if (playing && bass > 0.52) {
+          const sliceY = ((Math.sin(tSec * 19.3) * 0.5 + 0.5) * height) | 0;
+          const sliceH = 3 + ((bass * 12) | 0);
+          ctx.fillStyle = `rgba(${c3}, ${(0.14 + bass * 0.16).toFixed(3)})`;
+          ctx.fillRect(0, sliceY, width, sliceH);
+        }
+      }
+
+      // ================================================================
+      // 32. CAUSTICS (REFRACTED POOL LIGHT) (Razor-Sharp Web Patterns)
+      // ================================================================
+      else if (mode === 'caustics' && offCtx && offImg) {
+        const data = offImg.data;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const [r2, g2, b2] = colorsRef.current.c2Tuple;
+        const [r3, g3, b3] = colorsRef.current.c3Tuple;
+        const t = tSec * 0.72;
+        const boost = 1 + bass * 0.45;
+
+        for (let y = 0; y < offH; y++) {
+          const py = (y / offH) * 5.2;
+          for (let x = 0; x < offW; x++) {
+            const px = (x / offW) * 7.8;
+            // Overlapping refracted wave interference ridges -> razor-sharp caustic webs
+            const w1 = Math.sin(px + Math.sin(py + t) * 1.35 + t * 0.6);
+            const w2 = Math.cos(py * 1.2 + Math.cos(px - t * 0.85) * 1.35 - t * 0.5);
+            const w3 = Math.sin((px + py) * 0.85 + Math.sin(px - py + t * 1.1));
+            const ridge = Math.abs(w1 + w2 + w3 * 0.7);
+            const web = Math.pow(Math.max(0, 1 - ridge * 0.58), 4.2) * boost;
+            const c = Math.min(1, web);
+
+            const idx = (y * offW + x) * 4;
+            data[idx] = Math.min(255, r2 * 0.08 + r1 * c * 0.85 + r3 * c * c * 0.75 + 90 * c * c * c);
+            data[idx + 1] = Math.min(255, g2 * 0.1 + g1 * c * 0.85 + g3 * c * c * 0.75 + 95 * c * c * c);
+            data[idx + 2] = Math.min(255, b2 * 0.14 + b1 * c * 0.85 + b3 * c * c * 0.75 + 100 * c * c * c);
+            data[idx + 3] = 235;
+          }
+        }
+        offCtx.putImageData(offImg, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, 0, width, height);
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 33. CHROMATIC PRISM / DISPERSION (CMY + Accent Refracted Beams)
+      // ================================================================
+      else if (mode === 'prism') {
+        const cx = width * 0.5;
+        const cy = height * 0.5;
+        const rot = tSec * 0.22;
+        const beamLen = Math.hypot(width, height) * 0.85;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+
+        // Incoming white/accent beam hitting the crystal
+        const inAng = Math.PI + Math.sin(tSec * 0.35) * 0.22;
+        const inGrad = ctx.createLinearGradient(cx + Math.cos(inAng) * beamLen, cy + Math.sin(inAng) * beamLen, cx, cy);
+        inGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        inGrad.addColorStop(1, `rgba(255, 255, 255, ${(0.28 + bass * 0.2).toFixed(3)})`);
+        ctx.strokeStyle = inGrad;
+        ctx.lineWidth = 10 + bass * 8;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(inAng) * beamLen, cy + Math.sin(inAng) * beamLen);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+
+        // Dispersed overlapping CMY + track-accent spectral beams
+        const spectra = [
+          { rgb: '0, 235, 255', offset: -0.24 },
+          { rgb: c1, offset: -0.1 },
+          { rgb: '255, 45, 195', offset: 0.04 },
+          { rgb: c3, offset: 0.16 },
+          { rgb: '255, 225, 65', offset: 0.28 },
+        ];
+        const baseOutAng = Math.sin(tSec * 0.35) * 0.18;
+        for (let s = 0; s < spectra.length; s++) {
+          const sp = spectra[s];
+          const a = baseOutAng + sp.offset * (1 + bass * 0.35);
+          const spread = 0.075 + mids * 0.03;
+          const g = ctx.createLinearGradient(cx, cy, cx + Math.cos(a) * beamLen, cy + Math.sin(a) * beamLen);
+          g.addColorStop(0, `rgba(${sp.rgb}, ${(0.34 + bass * 0.2).toFixed(3)})`);
+          g.addColorStop(0.55, `rgba(${sp.rgb}, ${(0.14 + mids * 0.1).toFixed(3)})`);
+          g.addColorStop(1, `rgba(${sp.rgb}, 0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(a - spread) * beamLen, cy + Math.sin(a - spread) * beamLen);
+          ctx.lineTo(cx + Math.cos(a + spread) * beamLen, cy + Math.sin(a + spread) * beamLen);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Rotating glass triangle prism crystal at center
+        const prismR = Math.min(width, height) * 0.13;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rot);
+        ctx.beginPath();
+        for (let k = 0; k < 3; k++) {
+          const a = (k / 3) * Math.PI * 2 - Math.PI * 0.5;
+          const px = Math.cos(a) * prismR;
+          const py = Math.sin(a) * prismR;
+          if (k === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255, 255, 255, ${(0.35 + bass * 0.3).toFixed(3)})`;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 34. FERROFLUID SPIKES (Magnetic Glossy Liquid Metal Ridges)
+      // ================================================================
+      else if (mode === 'ferrofluid') {
+        const cx = width * 0.5;
+        const cy = height * 0.52;
+        const baseR = Math.min(width, height) * 0.24;
+        const layers = 3;
+
+        for (let l = layers - 1; l >= 0; l--) {
+          const spikeCount = 12 + l * 4;
+          const rScale = 1 + l * 0.18;
+          const pts = 160;
+          ctx.beginPath();
+          for (let i = 0; i <= pts; i++) {
+            const a = (i / pts) * Math.PI * 2;
+            const harmonic =
+              Math.pow(Math.max(0, Math.sin(a * spikeCount + tSec * (1.2 - l * 0.25))), 3) *
+                (38 + bass * 78) +
+              Math.pow(Math.max(0, Math.cos(a * (spikeCount * 0.5) - tSec * 0.9)), 2) *
+                (18 + mids * 32);
+            const r = baseR * rScale + harmonic;
+            const x = cx + Math.cos(a) * r;
+            const y = cy + Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+
+          // Glossy dark liquid metal fill + bright metallic accent ridge
+          const rgb = l === 0 ? c1 : l === 1 ? c2 : c3;
+          const fg = ctx.createRadialGradient(cx - baseR * 0.25, cy - baseR * 0.25, baseR * 0.1, cx, cy, baseR * 1.7);
+          fg.addColorStop(0, `rgba(${rgb}, ${(0.22 + bass * 0.14).toFixed(3)})`);
+          fg.addColorStop(0.55, '#090b10');
+          fg.addColorStop(1, '#020306');
+          ctx.fillStyle = fg;
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(${rgb}, ${(0.45 + bass * 0.42).toFixed(3)})`;
+          ctx.lineWidth = l === 0 ? 2.4 : 1.4;
+          ctx.stroke();
+
+          if (l === 0) {
+            ctx.strokeStyle = `rgba(255, 255, 255, ${(0.28 + bass * 0.35).toFixed(3)})`;
+            ctx.lineWidth = 0.9;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // ================================================================
+      // 35. OIL SLICK / IRIDESCENCE (Thin-Film Pearlescent Bands)
+      // ================================================================
+      else if (mode === 'oilslick' && offCtx && offImg) {
+        const data = offImg.data;
+        const [r1, g1, b1] = colorsRef.current.c1Tuple;
+        const t = tSec * 0.45;
+        const shift = bass * 1.4;
+
+        for (let y = 0; y < offH; y++) {
+          const ny = (y / offH) * 3.4;
+          for (let x = 0; x < offW; x++) {
+            const nx = (x / offW) * 4.8;
+            // Thin-film optical thickness field
+            const thick =
+              Math.sin(nx + Math.cos(ny * 1.3 + t)) +
+              Math.cos(ny - Math.sin(nx * 1.1 - t * 0.8)) +
+              0.6 * Math.sin((nx + ny) * 1.2 + t * 0.65);
+            const phase = thick * 2.8 + shift;
+            // Pearlescent RGB thin-film interference curves
+            const ir = 0.5 + 0.5 * Math.cos(phase);
+            const ig = 0.5 + 0.5 * Math.cos(phase + 2.094);
+            const ib = 0.5 + 0.5 * Math.cos(phase + 4.188);
+            // Keep obsidian troughs dark so iridescent bands gleam cleanly
+            const sheen = Math.pow(0.5 + 0.5 * Math.sin(thick * 1.9 + t * 0.5), 1.8) * (0.58 + energy * 0.35);
+
+            const idx = (y * offW + x) * 4;
+            data[idx] = Math.min(255, (ir * 195 + r1 * 0.28) * sheen + 6);
+            data[idx + 1] = Math.min(255, (ig * 195 + g1 * 0.28) * sheen + 7);
+            data[idx + 2] = Math.min(255, (ib * 210 + b1 * 0.28) * sheen + 11);
+            data[idx + 3] = 235;
+          }
+        }
+        offCtx.putImageData(offImg, 0, 0);
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, 0, width, height);
+        ctx.restore();
+      } else if (cachedExtraModule && extraState) {
+        cachedExtraModule.renderExtraTheme(
+          mode,
+          {
+            ctx,
+            width,
+            height,
+            tSec,
+            dt,
+            step,
+            bass,
+            mids,
+            energy,
+            playing,
+            c1,
+            c2,
+            c3,
+            c1T: colorsRef.current.c1Tuple,
+            c2T: colorsRef.current.c2Tuple,
+            c3T: colorsRef.current.c3Tuple,
+            freqBuf,
+            offCanvas,
+            offCtx,
+            offImg,
+            songTitle: colorsRef.current.songTitle,
+            songArtist: colorsRef.current.songArtist,
+          },
+          extraState
+        );
+      }
+
       prevBass = bass;
       rafId = requestAnimationFrame(render);
     };
@@ -1819,6 +3512,7 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
     rafId = requestAnimationFrame(render);
 
     return () => {
+      cancelled = true;
       if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', handleVisibility);
