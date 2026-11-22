@@ -74,7 +74,7 @@ import {
   BookmarkCheck,
   User,
 } from 'lucide-react';
-import { SpaceMeteorBackground } from './SpaceMeteorBackground';
+import { ThemeBackgroundCanvas } from './ThemeBackgroundCanvas';
 import {
   usePlayerStore,
   EQ_LABELS,
@@ -2402,20 +2402,54 @@ export const App: React.FC = () => {
   }, [listeningStats, compareStats]);
 
   const isDark = true;
-  const isSpaceUi = uiStyle === 'space';
-  const glassClass = isSpaceUi
-    ? 'space-surface-dark text-white'
-    : 'glass-surface-dark text-white';
-  const bgClass = isSpaceUi ? 'space-bg-dark text-white' : 'liquid-bg-dark text-white';
+  const isAnimatedCanvasTheme = uiStyle !== 'liquid';
+  const glassClassMap: Record<UiStyleMode, string> = {
+    liquid: 'glass-surface-dark text-white',
+    space: 'space-surface-dark text-white',
+    thunder: 'thunder-surface-dark text-white',
+    undersea: 'undersea-surface-dark text-white',
+    lava: 'lava-surface-dark text-white',
+    nature: 'nature-surface-dark text-white',
+  };
+  const bgClassMap: Record<UiStyleMode, string> = {
+    liquid: 'liquid-bg-dark text-white',
+    space: 'space-bg-dark text-white',
+    thunder: 'thunder-bg-dark text-white',
+    undersea: 'undersea-bg-dark text-white',
+    lava: 'lava-bg-dark text-white',
+    nature: 'nature-bg-dark text-white',
+  };
+  const glassClass = glassClassMap[uiStyle] || 'glass-surface-dark text-white';
+  const bgClass = bgClassMap[uiStyle] || 'liquid-bg-dark text-white';
   const bubblePlayState = isPlaying ? 'bubble-playing' : 'bubble-paused';
 
   const isCoverDark = palette.brightnessMode === 'dark';
   const isCoverBright = palette.brightnessMode === 'bright';
 
   const dynamicBgStyle: React.CSSProperties = useMemo(() => {
-    if (isSpaceUi) {
+    if (uiStyle === 'space') {
       return {
         background: `radial-gradient(ellipse at 50% 0%, #090d1b 0%, #05070e 58%, #020307 100%)`,
+      };
+    }
+    if (uiStyle === 'thunder') {
+      return {
+        background: `linear-gradient(180deg, #0b0e18 0%, #070a13 52%, #04050a 100%)`,
+      };
+    }
+    if (uiStyle === 'undersea') {
+      return {
+        background: `radial-gradient(ellipse at 50% 0%, rgba(${palette.primaryRgb}, 0.16) 0%, #041b2e 38%, #031120 72%, #020810 100%)`,
+      };
+    }
+    if (uiStyle === 'lava') {
+      return {
+        background: `radial-gradient(ellipse at 50% 100%, rgba(${palette.primaryRgb}, 0.18) 0%, #100914 48%, #060409 100%)`,
+      };
+    }
+    if (uiStyle === 'nature') {
+      return {
+        background: `radial-gradient(ellipse at 30% 10%, rgba(${palette.primaryRgb}, 0.14) 0%, #071912 42%, #04100b 75%, #020705 100%)`,
       };
     }
 
@@ -2433,7 +2467,7 @@ export const App: React.FC = () => {
     return {
       background: `radial-gradient(circle at 16% 16%, rgba(${palette.primaryRgb}, 0.44) 0%, transparent 54%), radial-gradient(circle at 84% 82%, rgba(${palette.secondaryRgb}, 0.38) 0%, transparent 56%), radial-gradient(circle at 50% 44%, rgba(${palette.tertiaryRgb}, 0.24) 0%, transparent 64%), linear-gradient(145deg, rgba(${palette.primaryRgb}, 0.16) 0%, #090a10 56%, #0d1018 100%)`,
     };
-  }, [isSpaceUi, isCoverDark, isCoverBright, palette.primaryRgb, palette.secondaryRgb, palette.tertiaryRgb]);
+  }, [uiStyle, isCoverDark, isCoverBright, palette.primaryRgb, palette.secondaryRgb, palette.tertiaryRgb]);
 
   // Grouped Artist Index across Library + Offline Songs (for Artist Search & Saved Artists)
   const allArtistsIndex = useMemo(() => {
@@ -4125,9 +4159,10 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* THEME BACKGROUND: METEOR SHOWER / SPACE VISUALIZER OR LIQUID GLASS AMBIENT BUBBLES */}
-      {isSpaceUi ? (
-        <SpaceMeteorBackground
+      {/* THEME BACKGROUND: AUDIO-REACTIVE CANVAS THEMES OR LIQUID GLASS AMBIENT BUBBLES */}
+      {isAnimatedCanvasTheme ? (
+        <ThemeBackgroundCanvas
+          mode={uiStyle}
           primaryRgb={palette.primaryRgb}
           secondaryRgb={palette.secondaryRgb}
           tertiaryRgb={palette.tertiaryRgb}
@@ -8294,7 +8329,27 @@ export const App: React.FC = () => {
                       {
                         id: 'space',
                         label: 'Meteor Shower / Space',
-                        desc: 'Twinkling stars & audio-reactive meteors',
+                        desc: 'Twinkling stars & glowing audio meteors',
+                      },
+                      {
+                        id: 'thunder',
+                        label: 'Thunder & Lightning',
+                        desc: 'Top storm clouds & beat-synced bolts',
+                      },
+                      {
+                        id: 'undersea',
+                        label: 'Water / Undersea',
+                        desc: 'Caustic sunbeams, bubbles & plankton',
+                      },
+                      {
+                        id: 'lava',
+                        label: 'Lava Lamp',
+                        desc: 'Floating molten wax blobs in song colors',
+                      },
+                      {
+                        id: 'nature',
+                        label: 'Nature',
+                        desc: 'Forest canopy, fireflies & drifting leaves',
                       },
                     ] as { id: UiStyleMode; label: string; desc: string }[]
                   ).map((st) => (
@@ -9251,31 +9306,31 @@ export const App: React.FC = () => {
                   <label className="block text-[11px] uppercase opacity-70">
                     Theme Style
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setUiStyle('liquid')}
-                      style={uiStyle === 'liquid' ? dynamicAccentStyle : undefined}
-                      className={`py-2 px-3 rounded-xl text-xs font-semibold transition border ${
-                        uiStyle === 'liquid'
-                          ? 'border-white/30'
-                          : 'bg-black/25 border-white/10 opacity-75 hover:opacity-100'
-                      }`}
-                    >
-                      Liquid (Default)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUiStyle('space')}
-                      style={uiStyle === 'space' ? dynamicAccentStyle : undefined}
-                      className={`py-2 px-3 rounded-xl text-xs font-semibold transition border ${
-                        uiStyle === 'space'
-                          ? 'border-white/30'
-                          : 'bg-black/25 border-white/10 opacity-75 hover:opacity-100'
-                      }`}
-                    >
-                      Meteor Shower / Space
-                    </button>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(
+                      [
+                        { id: 'liquid', label: 'Liquid (Default)' },
+                        { id: 'space', label: 'Meteor Shower' },
+                        { id: 'thunder', label: 'Thunder & Lightning' },
+                        { id: 'undersea', label: 'Water / Undersea' },
+                        { id: 'lava', label: 'Lava Lamp' },
+                        { id: 'nature', label: 'Nature' },
+                      ] as { id: UiStyleMode; label: string }[]
+                    ).map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setUiStyle(t.id)}
+                        style={uiStyle === t.id ? dynamicAccentStyle : undefined}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-semibold transition border truncate ${
+                          uiStyle === t.id
+                            ? 'border-white/30'
+                            : 'bg-black/25 border-white/10 opacity-75 hover:opacity-100'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
                   </div>
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button

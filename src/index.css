@@ -20,6 +20,22 @@
   background: radial-gradient(ellipse at 50% 0%, #090d1a 0%, #05060c 58%, #020307 100%);
 }
 
+.thunder-bg-dark {
+  background: linear-gradient(180deg, #0b0e18 0%, #080b14 48%, #04060b 100%);
+}
+
+.undersea-bg-dark {
+  background: linear-gradient(180deg, #041d31 0%, #031222 52%, #020912 100%);
+}
+
+.lava-bg-dark {
+  background: radial-gradient(ellipse at 50% 100%, #160d18 0%, #0b0810 55%, #050408 100%);
+}
+
+.nature-bg-dark {
+  background: linear-gradient(180deg, #071912 0%, #05120d 55%, #030906 100%);
+}
+
 .glass-surface-dark {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.04) 100%);
   backdrop-filter: blur(28px) saturate(185%);
@@ -30,11 +46,47 @@
 }
 
 .space-surface-dark {
-  background: linear-gradient(160deg, rgba(12, 15, 28, 0.72) 0%, rgba(7, 9, 18, 0.82) 100%);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  background: linear-gradient(160deg, rgba(10, 14, 26, 0.50) 0%, rgba(6, 8, 17, 0.60) 100%);
+  backdrop-filter: blur(15px) saturate(145%);
+  -webkit-backdrop-filter: blur(15px) saturate(145%);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  isolation: isolate;
+}
+
+.thunder-surface-dark {
+  background: linear-gradient(160deg, rgba(12, 16, 28, 0.50) 0%, rgba(7, 10, 18, 0.62) 100%);
+  backdrop-filter: blur(15px) saturate(145%);
+  -webkit-backdrop-filter: blur(15px) saturate(145%);
+  border: 1px solid rgba(200, 220, 255, 0.12);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.50), inset 0 1px 0 rgba(200, 220, 255, 0.1);
+  isolation: isolate;
+}
+
+.undersea-surface-dark {
+  background: linear-gradient(160deg, rgba(6, 26, 44, 0.48) 0%, rgba(3, 15, 28, 0.60) 100%);
+  backdrop-filter: blur(15px) saturate(155%);
+  -webkit-backdrop-filter: blur(15px) saturate(155%);
+  border: 1px solid rgba(130, 220, 255, 0.14);
+  box-shadow: 0 14px 40px rgba(0, 10, 24, 0.48), inset 0 1px 0 rgba(160, 235, 255, 0.1);
+  isolation: isolate;
+}
+
+.lava-surface-dark {
+  background: linear-gradient(160deg, rgba(18, 11, 22, 0.48) 0%, rgba(10, 7, 14, 0.60) 100%);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 200, 180, 0.12);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.50), inset 0 1px 0 rgba(255, 210, 190, 0.1);
+  isolation: isolate;
+}
+
+.nature-surface-dark {
+  background: linear-gradient(160deg, rgba(8, 24, 17, 0.48) 0%, rgba(5, 14, 10, 0.60) 100%);
+  backdrop-filter: blur(15px) saturate(150%);
+  -webkit-backdrop-filter: blur(15px) saturate(150%);
+  border: 1px solid rgba(160, 240, 190, 0.13);
+  box-shadow: 0 14px 40px rgba(0, 12, 6, 0.48), inset 0 1px 0 rgba(175, 245, 200, 0.1);
   isolation: isolate;
 }
 

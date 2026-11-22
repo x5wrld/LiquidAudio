@@ -540,7 +540,7 @@ const initialIndex =
       )
     : -1;
 
-export type UiStyleMode = 'liquid' | 'space';
+export type UiStyleMode = 'liquid' | 'space' | 'thunder' | 'undersea' | 'lava' | 'nature';
 
 interface PlayerState {
   // Theme & UI
@@ -767,9 +767,12 @@ export function reorderArrayWithGroup<T>(
   return { nextItems, newIndices };
 }
 
+const VALID_UI_STYLES: UiStyleMode[] = ['liquid', 'space', 'thunder', 'undersea', 'lava', 'nature'];
 const initialTheme: 'dark' | 'light' = 'dark';
 const initialUiStyle: UiStyleMode =
-  initialFx?.uiStyle === 'space' ? 'space' : 'liquid';
+  initialFx?.uiStyle && VALID_UI_STYLES.includes(initialFx.uiStyle as UiStyleMode)
+    ? (initialFx.uiStyle as UiStyleMode)
+    : 'liquid';
 if (typeof document !== 'undefined') {
   document.documentElement.classList.add('dark');
 }
@@ -852,7 +855,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   toggleTheme: () => {
-    const nextStyle: UiStyleMode = get().uiStyle === 'liquid' ? 'space' : 'liquid';
+    const idx = VALID_UI_STYLES.indexOf(get().uiStyle);
+    const nextStyle: UiStyleMode = VALID_UI_STYLES[(idx + 1) % VALID_UI_STYLES.length];
     set({ uiStyle: nextStyle, theme: 'dark' });
     saveStoredFx({ ...loadStoredFx(), uiStyle: nextStyle, theme: 'dark' });
   },

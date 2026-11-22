@@ -7,7 +7,7 @@ A modern, self-hosted **Navidrome / Subsonic** Progressive Web App (PWA) built w
 ## Key Features (BUILD V1)
 
 ### UI & Visuals
-- **Two Full Themes with Unified Navigation**: Switch between **Liquid (Default)** and **Meteor Shower / Space** — a dark deep-space theme with faintly twinkling stars and an always-on audio-reactive meteor shower visualizer colored dynamically from the active song's cover art.
+- **Six Full Audio-Reactive Themes with Unified Navigation**: Switch between **Liquid Glass (Default)**, **Meteor Shower / Space**, **Thunder & Lightning** (rolling top storm clouds + beat-synced forked bolts), **Water / Undersea** (caustic sunbeams, rising bubbles & bioluminescent plankton), **Lava Lamp** (floating molten wax blobs), and **Nature** (twilight forest canopy, fireflies & drifting leaves) — all dynamically colored from the active song's cover art.
 - **Unified Navigation Layout**: Top bar with Liquid Audio + Navidrome connection status, central Song & Artist search, and quick actions (Mini-Player, Listen Along, Wrapped, Settings); bottom bar with **Home**, **Lyrics**, **Library**, **Add**, and **Queue**.
 - **Home Discovery Dashboard**: Side-by-side Now Playing view with **Public Playlists** (with one-click "+ Save" to Your Playlists), **Recently Played**, and **Random Songs**.
 - **Accurate Album-Reactive Backgrounds**: 12-hue vibrancy-weighted HSL color extraction with automatic luminance calibration — dark/black covers render deep obsidian backgrounds, while white/bright covers use a softened anti-glare pearl aesthetic.
