@@ -1544,15 +1544,21 @@ export const AudioVisualizerCanvas: React.FC<{
 
       const analyser = audioController.analyser;
       const isWaveMode = mode === 'waveform';
+      const vizSpeed = Math.max(0.25, Math.min(1.5, usePlayerStore.getState().visualizerSpeed || 1.0));
 
       if (analyser && isPlaying) {
+        // Slower visualizer speed increases smoothingTimeConstant for a calmer, silkier response
+        const targetSmoothing = Math.min(0.96, Math.max(0.68, 0.96 - vizSpeed * 0.14));
+        if (Math.abs(analyser.smoothingTimeConstant - targetSmoothing) > 0.01) {
+          analyser.smoothingTimeConstant = targetSmoothing;
+        }
         if (isWaveMode) {
           analyser.getByteTimeDomainData(dataArray);
         } else {
           analyser.getByteFrequencyData(dataArray);
         }
       } else if (isPlaying) {
-        const t = nowTs * 0.0055;
+        const t = nowTs * 0.0055 * vizSpeed;
         const beatPulse = Math.pow(Math.max(0, Math.sin(t * 1.45)), 2);
         for (let i = 0; i < bufferLength; i++) {
           if (!isWaveMode) {
@@ -1762,7 +1768,7 @@ export const AudioVisualizerCanvas: React.FC<{
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
           const freqVal = dataArray[(i * 3) % bufferLength] / 255;
-          p.x += p.vx * bassBoostFactor * dpr;
+          p.x += p.vx * bassBoostFactor * vizSpeed * dpr;
 
           // Wrap offscreen so the orb enters smoothly from opacity 0 and exits smoothly to opacity 0
           if (p.x > width + margin) {
@@ -1772,7 +1778,7 @@ export const AudioVisualizerCanvas: React.FC<{
 
           const baseY = p.yRatio * height;
           const yOffset =
-            Math.sin(performance.now() * 0.0028 + p.phase) * (5 + freqVal * 13) * dpr;
+            Math.sin(performance.now() * 0.0028 * vizSpeed + p.phase) * (5 + freqVal * 13) * dpr;
           const py = baseY + yOffset;
 
           // Smoothstep alpha fade at left/right & top/bottom screen boundaries

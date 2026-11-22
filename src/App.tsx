@@ -807,6 +807,14 @@ export const App: React.FC = () => {
     visualizerBarAlign,
     setVisualizerBarAlign,
     cycleVisualizerBarAlign,
+    visualizerSpeed,
+    setVisualizerSpeed,
+    staticColorEnabled,
+    setStaticColorEnabled,
+    staticPrimaryHex,
+    staticSecondaryHex,
+    staticTertiaryHex,
+    setStaticColors,
     streamQuality,
     cycleStreamQuality,
     searchQuery,
@@ -973,7 +981,29 @@ export const App: React.FC = () => {
     }
   });
   const [selectedQueueIndices, setSelectedQueueIndices] = useState<number[]>([]);
-  const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
+  const [extractedPalette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
+  const palette: Palette = useMemo(() => {
+    if (!staticColorEnabled) return extractedPalette;
+    const hexToRgb = (hex: string, fallback: string): string => {
+      const clean = (hex || '').replace('#', '').trim();
+      if (clean.length !== 6) return fallback;
+      const n = parseInt(clean, 16);
+      if (Number.isNaN(n)) return fallback;
+      return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+    };
+    return {
+      primaryRgb: hexToRgb(staticPrimaryHex, extractedPalette.primaryRgb),
+      secondaryRgb: hexToRgb(staticSecondaryHex, extractedPalette.secondaryRgb),
+      tertiaryRgb: hexToRgb(staticTertiaryHex, extractedPalette.tertiaryRgb),
+      brightnessMode: 'normal',
+    };
+  }, [
+    staticColorEnabled,
+    staticPrimaryHex,
+    staticSecondaryHex,
+    staticTertiaryHex,
+    extractedPalette,
+  ]);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isNetworkOffline, setIsNetworkOffline] = useState<boolean>(
     typeof navigator !== 'undefined' ? !navigator.onLine : false
@@ -4167,6 +4197,7 @@ export const App: React.FC = () => {
           secondaryRgb={palette.secondaryRgb}
           tertiaryRgb={palette.tertiaryRgb}
           isPlaying={isPlaying}
+          speed={visualizerSpeed}
         />
       ) : (
       <div className="pointer-events-none fixed inset-0 overflow-hidden z-0 ambient-liquid-layer">
@@ -8371,6 +8402,151 @@ export const App: React.FC = () => {
                 </div>
               </div>
 
+              {/* Visualizer & Theme Animation Speed */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="text-[11px] uppercase opacity-75 font-semibold">
+                    Visualizer & Theme Speed
+                  </label>
+                  <span className="font-mono text-xs font-bold">
+                    {visualizerSpeed.toFixed(2)}x
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.25}
+                  max={1.5}
+                  step={0.05}
+                  value={visualizerSpeed}
+                  onChange={(e) => setVisualizerSpeed(Number(e.target.value))}
+                  className="w-full accent-purple-400 cursor-pointer"
+                />
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { label: '0.35x Slow', value: 0.35 },
+                    { label: '0.65x Chill', value: 0.65 },
+                    { label: '1.0x Normal', value: 1.0 },
+                    { label: '1.35x Fast', value: 1.35 },
+                  ].map((sp) => (
+                    <button
+                      key={sp.value}
+                      type="button"
+                      onClick={() => setVisualizerSpeed(sp.value)}
+                      style={
+                        Math.abs(visualizerSpeed - sp.value) < 0.03
+                          ? dynamicAccentStyle
+                          : undefined
+                      }
+                      className={`py-1.5 rounded-xl text-[11px] font-semibold transition border ${
+                        Math.abs(visualizerSpeed - sp.value) < 0.03
+                          ? 'border-white/30'
+                          : 'bg-white/5 border-white/10 opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      {sp.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic Song Colors vs Static Custom Colors */}
+              <div className="space-y-2.5 pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] uppercase opacity-75 font-semibold">
+                    Visualizer & Theme Colors
+                  </label>
+                  <div className="flex items-center gap-1 bg-black/30 p-0.5 rounded-xl border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setStaticColorEnabled(false)}
+                      style={!staticColorEnabled ? dynamicAccentStyle : undefined}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                        !staticColorEnabled ? '' : 'opacity-65 hover:opacity-100'
+                      }`}
+                    >
+                      Song Colors
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStaticColorEnabled(true)}
+                      style={staticColorEnabled ? dynamicAccentStyle : undefined}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                        staticColorEnabled ? '' : 'opacity-65 hover:opacity-100'
+                      }`}
+                    >
+                      Static Colors
+                    </button>
+                  </div>
+                </div>
+
+                {staticColorEnabled && (
+                  <div className="space-y-2.5 p-2.5 rounded-2xl bg-black/25 border border-white/10">
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: 'Nebula Purple', p: '#a855f7', s: '#38bdf8', t: '#f472b6' },
+                        { label: 'Ocean Cyan', p: '#06b6d4', s: '#3b82f6', t: '#67e8f9' },
+                        { label: 'Crimson Ember', p: '#ef4444', s: '#f97316', t: '#fbbf24' },
+                        { label: 'Emerald Glow', p: '#10b981', s: '#34d399', t: '#a7f3d0' },
+                        { label: 'Solar Gold', p: '#f59e0b', s: '#f43f5e', t: '#fde047' },
+                        { label: 'Rose Neon', p: '#ec4899', s: '#8b5cf6', t: '#f9a8d4' },
+                        { label: 'Arctic Ice', p: '#e2e8f0', s: '#38bdf8', t: '#93c5fd' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setStaticColors(preset.p, preset.s, preset.t)}
+                          className="px-2 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-[10px] font-semibold flex items-center gap-1.5 transition"
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{
+                              background: `linear-gradient(135deg, ${preset.p}, ${preset.s})`,
+                            }}
+                          />
+                          <span>{preset.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] cursor-pointer">
+                        <span className="opacity-75">Primary</span>
+                        <input
+                          type="color"
+                          value={staticPrimaryHex}
+                          onChange={(e) =>
+                            setStaticColors(e.target.value, staticSecondaryHex, staticTertiaryHex)
+                          }
+                          className="w-6 h-6 rounded bg-transparent border-0 cursor-pointer"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] cursor-pointer">
+                        <span className="opacity-75">Secondary</span>
+                        <input
+                          type="color"
+                          value={staticSecondaryHex}
+                          onChange={(e) =>
+                            setStaticColors(staticPrimaryHex, e.target.value, staticTertiaryHex)
+                          }
+                          className="w-6 h-6 rounded bg-transparent border-0 cursor-pointer"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] cursor-pointer">
+                        <span className="opacity-75">Accent</span>
+                        <input
+                          type="color"
+                          value={staticTertiaryHex}
+                          onChange={(e) =>
+                            setStaticColors(staticPrimaryHex, staticSecondaryHex, e.target.value)
+                          }
+                          className="w-6 h-6 rounded bg-transparent border-0 cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Visualizer Style Picker */}
               <div className="space-y-1.5">
                 <label className="text-[11px] uppercase opacity-65 font-semibold">
@@ -9332,6 +9508,86 @@ export const App: React.FC = () => {
                       </button>
                     ))}
                   </div>
+
+                  {/* Quick Visualizer Speed & Static Color Controls inside Settings */}
+                  <div className="pt-2 space-y-2 border-t border-white/10">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="uppercase opacity-70">Visualizer Speed</span>
+                      <span className="font-mono font-bold">{visualizerSpeed.toFixed(2)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.25}
+                      max={1.5}
+                      step={0.05}
+                      value={visualizerSpeed}
+                      onChange={(e) => setVisualizerSpeed(Number(e.target.value))}
+                      className="w-full accent-purple-400 cursor-pointer"
+                    />
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <span className="text-[11px] uppercase opacity-70">Color Mode</span>
+                      <div className="flex items-center gap-1 bg-black/30 p-0.5 rounded-lg border border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => setStaticColorEnabled(false)}
+                          style={!staticColorEnabled ? dynamicAccentStyle : undefined}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition ${
+                            !staticColorEnabled ? '' : 'opacity-65 hover:opacity-100'
+                          }`}
+                        >
+                          Song
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStaticColorEnabled(true)}
+                          style={staticColorEnabled ? dynamicAccentStyle : undefined}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition ${
+                            staticColorEnabled ? '' : 'opacity-65 hover:opacity-100'
+                          }`}
+                        >
+                          Static
+                        </button>
+                      </div>
+                    </div>
+                    {staticColorEnabled && (
+                      <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                        <label className="flex items-center justify-between px-2 py-1 rounded-lg bg-black/25 border border-white/10 text-[10px] cursor-pointer">
+                          <span className="opacity-70">Main</span>
+                          <input
+                            type="color"
+                            value={staticPrimaryHex}
+                            onChange={(e) =>
+                              setStaticColors(e.target.value, staticSecondaryHex, staticTertiaryHex)
+                            }
+                            className="w-5 h-5 bg-transparent border-0 cursor-pointer"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between px-2 py-1 rounded-lg bg-black/25 border border-white/10 text-[10px] cursor-pointer">
+                          <span className="opacity-70">Sub</span>
+                          <input
+                            type="color"
+                            value={staticSecondaryHex}
+                            onChange={(e) =>
+                              setStaticColors(staticPrimaryHex, e.target.value, staticTertiaryHex)
+                            }
+                            className="w-5 h-5 bg-transparent border-0 cursor-pointer"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between px-2 py-1 rounded-lg bg-black/25 border border-white/10 text-[10px] cursor-pointer">
+                          <span className="opacity-70">Glow</span>
+                          <input
+                            type="color"
+                            value={staticTertiaryHex}
+                            onChange={(e) =>
+                              setStaticColors(staticPrimaryHex, staticSecondaryHex, e.target.value)
+                            }
+                            className="w-5 h-5 bg-transparent border-0 cursor-pointer"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
                       type="button"

@@ -10,6 +10,7 @@ interface ThemeBackgroundCanvasProps {
   secondaryRgb: string;
   tertiaryRgb: string;
   isPlaying: boolean;
+  speed?: number;
 }
 
 interface Star {
@@ -162,13 +163,14 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
   secondaryRgb,
   tertiaryRgb,
   isPlaying,
+  speed = 1.0,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const colorsRef = useRef({ primaryRgb, secondaryRgb, tertiaryRgb, isPlaying });
+  const colorsRef = useRef({ primaryRgb, secondaryRgb, tertiaryRgb, isPlaying, speed });
 
   useEffect(() => {
-    colorsRef.current = { primaryRgb, secondaryRgb, tertiaryRgb, isPlaying };
-  }, [primaryRgb, secondaryRgb, tertiaryRgb, isPlaying]);
+    colorsRef.current = { primaryRgb, secondaryRgb, tertiaryRgb, isPlaying, speed };
+  }, [primaryRgb, secondaryRgb, tertiaryRgb, isPlaying, speed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -410,6 +412,7 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
 
     let rafId = 0;
     let lastTs = performance.now();
+    let simTime = performance.now() * 0.001;
     let spawnAccumulator = 0;
     let prevBass = 0;
     let lightningCooldown = 0.6;
@@ -423,9 +426,12 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
         return;
       }
 
-      const dt = Math.min(0.05, Math.max(0.008, (now - lastTs) / 1000));
+      const rawDt = Math.min(0.05, Math.max(0.008, (now - lastTs) / 1000));
       lastTs = now;
-      const tSec = now * 0.001;
+      const spd = Math.max(0.2, Math.min(2.0, colorsRef.current.speed || 1.0));
+      const dt = rawDt * spd;
+      simTime += dt;
+      const tSec = simTime;
       const step = dt * 60;
 
       const { primaryRgb: c1, secondaryRgb: c2, tertiaryRgb: c3, isPlaying: playing } = colorsRef.current;

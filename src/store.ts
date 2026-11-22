@@ -549,6 +549,11 @@ interface PlayerState {
   activeView: ActiveView;
   visualizerMode: VisualizerMode;
   visualizerBarAlign: VisualizerBarAlign;
+  visualizerSpeed: number;
+  staticColorEnabled: boolean;
+  staticPrimaryHex: string;
+  staticSecondaryHex: string;
+  staticTertiaryHex: string;
   streamQuality: StreamQuality;
   searchOpen: boolean;
   searchQuery: string;
@@ -630,6 +635,9 @@ interface PlayerState {
   cycleVisualizerMode: () => void;
   setVisualizerBarAlign: (align: VisualizerBarAlign) => void;
   cycleVisualizerBarAlign: () => void;
+  setVisualizerSpeed: (speed: number) => void;
+  setStaticColorEnabled: (enabled: boolean) => void;
+  setStaticColors: (primaryHex: string, secondaryHex: string, tertiaryHex?: string) => void;
   cycleStreamQuality: () => void;
   setSearchOpen: (open: boolean) => void;
   setSearchQuery: (q: string) => void;
@@ -783,6 +791,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   activeView: 'home',
   visualizerMode: initialFx?.visualizerMode || 'spectrum',
   visualizerBarAlign: initialFx?.visualizerBarAlign || 'center',
+  visualizerSpeed:
+    typeof initialFx?.visualizerSpeed === 'number'
+      ? Math.max(0.25, Math.min(1.5, initialFx.visualizerSpeed))
+      : 1.0,
+  staticColorEnabled: Boolean(initialFx?.staticColorEnabled),
+  staticPrimaryHex:
+    typeof initialFx?.staticPrimaryHex === 'string' && initialFx.staticPrimaryHex.startsWith('#')
+      ? initialFx.staticPrimaryHex
+      : '#a855f7',
+  staticSecondaryHex:
+    typeof initialFx?.staticSecondaryHex === 'string' && initialFx.staticSecondaryHex.startsWith('#')
+      ? initialFx.staticSecondaryHex
+      : '#38bdf8',
+  staticTertiaryHex:
+    typeof initialFx?.staticTertiaryHex === 'string' && initialFx.staticTertiaryHex.startsWith('#')
+      ? initialFx.staticTertiaryHex
+      : '#f472b6',
   streamQuality: initialFx?.streamQuality || 'raw',
   searchOpen: false,
   searchQuery: '',
@@ -864,6 +889,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setUiStyle: (uiStyle) => {
     set({ uiStyle, theme: 'dark' });
     saveStoredFx({ ...loadStoredFx(), uiStyle, theme: 'dark' });
+  },
+
+  setVisualizerSpeed: (speed) => {
+    const clamped = Math.max(0.25, Math.min(1.5, Number(speed) || 1.0));
+    set({ visualizerSpeed: clamped });
+    saveStoredFx({ ...loadStoredFx(), visualizerSpeed: clamped });
+  },
+
+  setStaticColorEnabled: (staticColorEnabled) => {
+    set({ staticColorEnabled });
+    saveStoredFx({ ...loadStoredFx(), staticColorEnabled });
+  },
+
+  setStaticColors: (staticPrimaryHex, staticSecondaryHex, staticTertiaryHex) => {
+    const nextTertiary = staticTertiaryHex || get().staticTertiaryHex;
+    set({
+      staticPrimaryHex,
+      staticSecondaryHex,
+      staticTertiaryHex: nextTertiary,
+      staticColorEnabled: true,
+    });
+    saveStoredFx({
+      ...loadStoredFx(),
+      staticPrimaryHex,
+      staticSecondaryHex,
+      staticTertiaryHex: nextTertiary,
+      staticColorEnabled: true,
+    });
   },
 
   setShareServerConfig: (shareServerUrl, shareApiToken) => {
