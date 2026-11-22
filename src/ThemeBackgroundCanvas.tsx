@@ -128,6 +128,70 @@ interface LeafParticle {
   rgbIdx: number;
 }
 
+interface GlassDrop {
+  x: number;
+  y: number;
+  r: number;
+  vy: number;
+  sliding: boolean;
+  trailLen: number;
+  wobble: number;
+  alpha: number;
+}
+
+interface BokehOrb {
+  x: number;
+  y: number;
+  r: number;
+  rgbIdx: number;
+  phase: number;
+}
+
+interface NebulaCloud {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  rot: number;
+  rotSpeed: number;
+  vx: number;
+  vy: number;
+  rgbIdx: number;
+  alpha: number;
+}
+
+interface Jellyfish {
+  x: number;
+  y: number;
+  r: number;
+  vy: number;
+  phase: number;
+  rgbIdx: number;
+}
+
+interface Snowflake {
+  x: number;
+  y: number;
+  r: number;
+  vy: number;
+  vx: number;
+  swayAmp: number;
+  swayFreq: number;
+  phase: number;
+  alpha: number;
+  soft: boolean;
+}
+
+interface OrbitParticle {
+  angle: number;
+  radius: number;
+  angularVel: number;
+  size: number;
+  tilt: number;
+  rgbIdx: number;
+  alpha: number;
+}
+
 function generateLightningSegments(
   startX: number,
   startY: number,
@@ -195,6 +259,12 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
     const lavaBlobs: LavaBlob[] = [];
     const fireflies: Firefly[] = [];
     const leaves: LeafParticle[] = [];
+    const glassDrops: GlassDrop[] = [];
+    const bokehOrbs: BokehOrb[] = [];
+    const nebulaClouds: NebulaCloud[] = [];
+    const jellies: Jellyfish[] = [];
+    const snowflakes: Snowflake[] = [];
+    const orbitParticles: OrbitParticle[] = [];
 
     const getRgbByIdx = (idx: number): string => {
       const { primaryRgb: c1, secondaryRgb: c2, tertiaryRgb: c3 } = colorsRef.current;
@@ -268,6 +338,12 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
       lavaBlobs.length = 0;
       fireflies.length = 0;
       leaves.length = 0;
+      glassDrops.length = 0;
+      bokehOrbs.length = 0;
+      nebulaClouds.length = 0;
+      jellies.length = 0;
+      snowflakes.length = 0;
+      orbitParticles.length = 0;
 
       const isMobile = width < 768;
 
@@ -390,6 +466,131 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
             swayPhase: Math.random() * Math.PI * 2,
             alpha: 0.28 + Math.random() * 0.32,
             rgbIdx: i % 3,
+          });
+        }
+      } else if (mode === 'rain') {
+        const bokehCount = isMobile ? 9 : 15;
+        for (let i = 0; i < bokehCount; i++) {
+          bokehOrbs.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: (isMobile ? 45 : 75) + Math.random() * 90,
+            rgbIdx: i % 3,
+            phase: Math.random() * Math.PI * 2,
+          });
+        }
+        const dropCount = isMobile ? 55 : 95;
+        for (let i = 0; i < dropCount; i++) {
+          const sliding = Math.random() < 0.34;
+          glassDrops.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: sliding ? 2.6 + Math.random() * 3.4 : 1.3 + Math.random() * 2.6,
+            vy: sliding ? 0.65 + Math.random() * 1.65 : 0,
+            sliding,
+            trailLen: sliding ? 24 + Math.random() * 68 : 0,
+            wobble: Math.random() * Math.PI * 2,
+            alpha: 0.35 + Math.random() * 0.45,
+          });
+        }
+      } else if (mode === 'synthwave' || mode === 'eclipse' || mode === 'aurora' || mode === 'blackhole') {
+        const starCount = isMobile ? 75 : 130;
+        for (let i = 0; i < starCount; i++) {
+          stars.push({
+            x: Math.random() * width,
+            y: mode === 'synthwave' ? Math.random() * height * 0.56 : Math.random() * height,
+            r: Math.random() * 1.45 + 0.35,
+            baseAlpha: Math.random() * 0.55 + 0.2,
+            twinkleSpeed: Math.random() * 1.7 + 0.4,
+            phase: Math.random() * Math.PI * 2,
+            sparkle: Math.random() < 0.1,
+          });
+        }
+        if (mode === 'blackhole') {
+          const minDim = Math.min(width, height);
+          const bhR = minDim * 0.13;
+          const pCount = isMobile ? 90 : 155;
+          for (let i = 0; i < pCount; i++) {
+            const radius = bhR * (1.28 + Math.random() * 2.45);
+            orbitParticles.push({
+              angle: Math.random() * Math.PI * 2,
+              radius,
+              angularVel: (0.012 + (bhR * 2.4) / Math.max(40, radius) * 0.015) * (0.7 + Math.random() * 0.6),
+              size: 1.2 + Math.random() * 2.4,
+              tilt: 0.28 + Math.random() * 0.14,
+              rgbIdx: i % 3,
+              alpha: 0.32 + Math.random() * 0.58,
+            });
+          }
+        }
+      } else if (mode === 'nebula') {
+        const starCount = isMobile ? 85 : 150;
+        for (let i = 0; i < starCount; i++) {
+          stars.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: Math.random() * 1.5 + 0.35,
+            baseAlpha: Math.random() * 0.55 + 0.22,
+            twinkleSpeed: Math.random() * 1.8 + 0.4,
+            phase: Math.random() * Math.PI * 2,
+            sparkle: Math.random() < 0.14,
+          });
+        }
+        const cloudCount = isMobile ? 8 : 13;
+        const maxDim = Math.max(width, height);
+        for (let i = 0; i < cloudCount; i++) {
+          nebulaClouds.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            rx: maxDim * (0.2 + Math.random() * 0.24),
+            ry: maxDim * (0.12 + Math.random() * 0.16),
+            rot: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.0018,
+            vx: (Math.random() - 0.5) * 0.16,
+            vy: (Math.random() - 0.5) * 0.12,
+            rgbIdx: i % 3,
+            alpha: 0.16 + Math.random() * 0.14,
+          });
+        }
+      } else if (mode === 'bioluminescent') {
+        const jCount = isMobile ? 5 : 8;
+        for (let i = 0; i < jCount; i++) {
+          jellies.push({
+            x: width * (0.1 + Math.random() * 0.8),
+            y: Math.random() * height,
+            r: (isMobile ? 16 : 22) + Math.random() * 18,
+            vy: 0.22 + Math.random() * 0.36,
+            phase: Math.random() * Math.PI * 2,
+            rgbIdx: i % 3,
+          });
+        }
+        const sporeCount = isMobile ? 32 : 54;
+        for (let i = 0; i < sporeCount; i++) {
+          plankton.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * 0.42,
+            vy: -0.15 - Math.random() * 0.35,
+            r: 1.6 + Math.random() * 3.4,
+            phase: Math.random() * Math.PI * 2,
+            rgbIdx: i % 3,
+          });
+        }
+      } else if (mode === 'snowfall') {
+        const flakeCount = isMobile ? 55 : 95;
+        for (let i = 0; i < flakeCount; i++) {
+          const soft = Math.random() < 0.28;
+          snowflakes.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: soft ? 3.5 + Math.random() * 4.5 : 1.0 + Math.random() * 2.4,
+            vy: soft ? 0.55 + Math.random() * 0.85 : 0.4 + Math.random() * 0.95,
+            vx: 0.12 + Math.random() * 0.32,
+            swayAmp: 0.25 + Math.random() * 0.65,
+            swayFreq: 0.5 + Math.random() * 1.1,
+            phase: Math.random() * Math.PI * 2,
+            alpha: soft ? 0.2 + Math.random() * 0.25 : 0.45 + Math.random() * 0.45,
+            soft,
           });
         }
       }
@@ -1049,6 +1250,558 @@ export const ThemeBackgroundCanvas: React.FC<ThemeBackgroundCanvasProps> = ({
           ctx.arc(f.x, f.y, haloR, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
+
+      // ================================================================
+      // 6. RAIN ON GLASS (Window Droplets, Wet Trails & Soft Bokeh)
+      // ================================================================
+      else if (mode === 'rain') {
+        // Blurred bokeh city/song lights behind the wet windowpane
+        for (let i = 0; i < bokehOrbs.length; i++) {
+          const bk = bokehOrbs[i];
+          const rgb = getRgbByIdx(bk.rgbIdx);
+          const pulse = 0.78 + 0.22 * Math.sin(tSec * 0.9 + bk.phase);
+          const r = bk.r * (1 + bass * 0.12);
+          const g = ctx.createRadialGradient(bk.x, bk.y, r * 0.1, bk.x, bk.y, r);
+          g.addColorStop(0, `rgba(${rgb}, ${(0.16 * pulse + bass * 0.08).toFixed(3)})`);
+          g.addColorStop(0.55, `rgba(${rgb}, ${(0.07 * pulse).toFixed(3)})`);
+          g.addColorStop(1, `rgba(${rgb}, 0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(bk.x, bk.y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Droplets beading and rolling down the glass
+        for (let i = 0; i < glassDrops.length; i++) {
+          const d = glassDrops[i];
+          if (d.sliding) {
+            d.y += d.vy * (1 + bass * 1.1) * step;
+            d.x += Math.sin(d.y * 0.03 + d.wobble) * 0.16 * step;
+            if (d.y - d.trailLen > height + 20) {
+              d.y = -10 - Math.random() * 40;
+              d.x = Math.random() * width;
+            }
+            // Glistening wet trail behind sliding droplet
+            const tGrad = ctx.createLinearGradient(d.x, d.y, d.x, d.y - d.trailLen);
+            tGrad.addColorStop(0, `rgba(215, 235, 255, ${(d.alpha * 0.42).toFixed(3)})`);
+            tGrad.addColorStop(0.5, `rgba(${c1}, ${(d.alpha * 0.18).toFixed(3)})`);
+            tGrad.addColorStop(1, 'rgba(215, 235, 255, 0)');
+            ctx.strokeStyle = tGrad;
+            ctx.lineWidth = Math.max(1, d.r * 0.65);
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(d.x, d.y - d.trailLen);
+            ctx.stroke();
+          } else if (playing && bass > 0.68 && Math.random() < dt * 0.12) {
+            // Bass vibration occasionally dislodges a static drop
+            d.sliding = true;
+            d.vy = 0.7 + Math.random() * 1.2;
+            d.trailLen = 28 + Math.random() * 50;
+          }
+
+          // Refractive water bead
+          const dg = ctx.createRadialGradient(d.x - d.r * 0.3, d.y - d.r * 0.35, 0.2, d.x, d.y, d.r * 1.25);
+          dg.addColorStop(0, `rgba(255, 255, 255, ${(d.alpha * 0.92).toFixed(3)})`);
+          dg.addColorStop(0.45, `rgba(${c2}, ${(d.alpha * 0.28).toFixed(3)})`);
+          dg.addColorStop(1, `rgba(195, 225, 255, ${(d.alpha * 0.55).toFixed(3)})`);
+          ctx.fillStyle = dg;
+          ctx.beginPath();
+          ctx.ellipse(d.x, d.y, d.r * 0.9, d.r * (d.sliding ? 1.25 : 1.05), 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // ================================================================
+      // 7. SYNTHWAVE (Retro Segmented Sun + Perspective Neon Grid)
+      // ================================================================
+      else if (mode === 'synthwave') {
+        const horizonY = height * 0.58;
+
+        // Upper twilight stars
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          const tw = 0.55 + 0.45 * Math.sin(tSec * s.twinkleSpeed + s.phase);
+          ctx.fillStyle = `rgba(245, 240, 255, ${(s.baseAlpha * tw).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Horizon atmospheric glow
+        const hGlow = ctx.createRadialGradient(
+          width * 0.5,
+          horizonY,
+          10,
+          width * 0.5,
+          horizonY,
+          Math.max(width, height) * 0.58
+        );
+        hGlow.addColorStop(0, `rgba(${c1}, ${(0.34 + bass * 0.24).toFixed(3)})`);
+        hGlow.addColorStop(0.45, `rgba(${c2}, ${(0.16 + mids * 0.1).toFixed(3)})`);
+        hGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = hGlow;
+        ctx.fillRect(0, 0, width, height);
+
+        // Glowing segmented retro sun above the horizon
+        const sunR = Math.min(width, height) * (0.16 + bass * 0.025);
+        const sunX = width * 0.5;
+        const sunY = horizonY - sunR * 0.52;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+        ctx.clip();
+
+        const sunGrad = ctx.createLinearGradient(sunX, sunY - sunR, sunX, sunY + sunR);
+        sunGrad.addColorStop(0, `rgba(${c3}, 0.92)`);
+        sunGrad.addColorStop(0.5, `rgba(${c1}, 0.88)`);
+        sunGrad.addColorStop(1, `rgba(${c2}, 0.82)`);
+        ctx.fillStyle = sunGrad;
+        ctx.fillRect(sunX - sunR, sunY - sunR, sunR * 2, sunR * 2);
+
+        // Classic retro horizontal sun scanline bands
+        ctx.fillStyle = '#090612';
+        for (let b = 0; b < 6; b++) {
+          const bandY = sunY + sunR * (0.05 + b * 0.165);
+          const bandH = 2.2 + b * 1.45;
+          ctx.fillRect(sunX - sunR, bandY, sunR * 2, bandH);
+        }
+        ctx.restore();
+
+        // Dark ground plane below horizon
+        const groundGrad = ctx.createLinearGradient(0, horizonY, 0, height);
+        groundGrad.addColorStop(0, '#10071e');
+        groundGrad.addColorStop(1, '#040308');
+        ctx.fillStyle = groundGrad;
+        ctx.fillRect(0, horizonY, width, height - horizonY);
+
+        // Scrolling perspective neon grid
+        ctx.save();
+        ctx.strokeStyle = `rgba(${c2}, ${(0.34 + bass * 0.25).toFixed(3)})`;
+        ctx.lineWidth = 1.1;
+
+        // Horizontal perspective lines advancing toward viewer
+        const gridLines = 14;
+        const scrollOffset = (tSec * (0.45 + energy * 0.35)) % 1;
+        for (let i = 0; i < gridLines; i++) {
+          const z = (i + scrollOffset) / gridLines;
+          const y = horizonY + Math.pow(z, 2.15) * (height - horizonY);
+          ctx.globalAlpha = Math.min(1, z * 1.15);
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+
+        // Radial perspective vertical lines from vanishing point
+        ctx.strokeStyle = `rgba(${c1}, ${(0.28 + mids * 0.2).toFixed(3)})`;
+        ctx.globalAlpha = 0.85;
+        const vCount = 16;
+        for (let i = -vCount; i <= vCount; i++) {
+          const bottomX = width * 0.5 + i * (width * 0.12);
+          ctx.beginPath();
+          ctx.moveTo(width * 0.5, horizonY);
+          ctx.lineTo(bottomX, height);
+          ctx.stroke();
+        }
+
+        // Bright horizon laser line
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = `rgba(${c1}, ${(0.7 + bass * 0.25).toFixed(3)})`;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(0, horizonY);
+        ctx.lineTo(width, horizonY);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 8. SOLAR ECLIPSE (Dark Lunar Disc + Pulsing Corona & Flares)
+      // ================================================================
+      else if (mode === 'eclipse') {
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          const tw = 0.5 + 0.5 * Math.sin(tSec * s.twinkleSpeed + s.phase);
+          ctx.fillStyle = `rgba(245, 248, 255, ${(s.baseAlpha * tw * 0.85).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const cx = width * 0.5;
+        const cy = height * 0.42;
+        const moonR = Math.min(width, height) * 0.165;
+
+        // Outer expansive corona halo
+        const outerCorona = ctx.createRadialGradient(cx, cy, moonR * 0.9, cx, cy, moonR * (2.6 + bass * 0.85));
+        outerCorona.addColorStop(0, `rgba(255, 255, 255, ${(0.55 + bass * 0.25).toFixed(3)})`);
+        outerCorona.addColorStop(0.18, `rgba(${c1}, ${(0.45 + bass * 0.24).toFixed(3)})`);
+        outerCorona.addColorStop(0.52, `rgba(${c2}, ${(0.18 + mids * 0.14).toFixed(3)})`);
+        outerCorona.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = outerCorona;
+        ctx.beginPath();
+        ctx.arc(cx, cy, moonR * (2.6 + bass * 0.85), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Swirling plasma corona streamers around the eclipse rim
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const rayCount = 24;
+        for (let i = 0; i < rayCount; i++) {
+          const angle = (i / rayCount) * Math.PI * 2 + tSec * (i % 2 === 0 ? 0.08 : -0.06);
+          const wave = 0.65 + 0.35 * Math.sin(tSec * 1.8 + i * 1.3);
+          const len = moonR * (1.28 + wave * 0.52 + bass * 0.65);
+          const sx = cx + Math.cos(angle) * moonR * 0.94;
+          const sy = cy + Math.sin(angle) * moonR * 0.94;
+          const ex = cx + Math.cos(angle) * len;
+          const ey = cy + Math.sin(angle) * len;
+          const rg = ctx.createLinearGradient(sx, sy, ex, ey);
+          rg.addColorStop(0, `rgba(${i % 2 === 0 ? c1 : c3}, ${(0.42 + bass * 0.28).toFixed(3)})`);
+          rg.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.strokeStyle = rg;
+          ctx.lineWidth = 4 + wave * 8;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // Crisp glowing ring of fire
+        ctx.strokeStyle = `rgba(255, 250, 240, ${(0.82 + bass * 0.18).toFixed(3)})`;
+        ctx.lineWidth = 2.4 + bass * 1.4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, moonR + 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Pitch-black lunar silhouette
+        ctx.fillStyle = '#030306';
+        ctx.beginPath();
+        ctx.arc(cx, cy, moonR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Diamond-ring glint on upper-right rim
+        const gx = cx + Math.cos(-0.68) * (moonR + 2);
+        const gy = cy + Math.sin(-0.68) * (moonR + 2);
+        const glintR = 26 + bass * 22;
+        const glint = ctx.createRadialGradient(gx, gy, 1, gx, gy, glintR);
+        glint.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+        glint.addColorStop(0.3, `rgba(${c3}, 0.55)`);
+        glint.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glint;
+        ctx.beginPath();
+        ctx.arc(gx, gy, glintR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ================================================================
+      // 9. NEBULA (Swirling Deep-Space Cosmic Gas Clouds & Star Clusters)
+      // ================================================================
+      else if (mode === 'nebula') {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < nebulaClouds.length; i++) {
+          const nc = nebulaClouds[i];
+          nc.x += nc.vx * step;
+          nc.y += nc.vy * step;
+          nc.rot += nc.rotSpeed * step;
+          if (nc.x < -nc.rx) nc.x = width + nc.rx;
+          if (nc.x > width + nc.rx) nc.x = -nc.rx;
+          if (nc.y < -nc.ry) nc.y = height + nc.ry;
+          if (nc.y > height + nc.ry) nc.y = -nc.ry;
+
+          const rgb = getRgbByIdx(nc.rgbIdx);
+          const scale = 1 + bass * 0.12 + Math.sin(tSec * 0.4 + i) * 0.05;
+          ctx.save();
+          ctx.translate(nc.x, nc.y);
+          ctx.rotate(nc.rot);
+          ctx.scale(scale, scale * (nc.ry / Math.max(1, nc.rx)));
+
+          const g = ctx.createRadialGradient(0, 0, nc.rx * 0.05, 0, 0, nc.rx);
+          g.addColorStop(0, `rgba(${rgb}, ${(nc.alpha + energy * 0.12).toFixed(3)})`);
+          g.addColorStop(0.55, `rgba(${rgb}, ${(nc.alpha * 0.45).toFixed(3)})`);
+          g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(0, 0, nc.rx, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.restore();
+
+        // Embedded glittering star clusters
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          const tw = 0.5 + 0.5 * Math.sin(tSec * s.twinkleSpeed + s.phase);
+          const a = Math.min(0.95, s.baseAlpha * tw + mids * 0.12);
+          ctx.fillStyle = `rgba(245, 250, 255, ${a.toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // ================================================================
+      // 10. AURORA BOREALIS (Flowing Northern Lights Curtains)
+      // ================================================================
+      else if (mode === 'aurora') {
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          const tw = 0.55 + 0.45 * Math.sin(tSec * s.twinkleSpeed + s.phase);
+          ctx.fillStyle = `rgba(240, 248, 255, ${(s.baseAlpha * tw * 0.85).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        const curtains = 4;
+        const stepX = width < 768 ? 22 : 16;
+        for (let c = 0; c < curtains; c++) {
+          const rgb = getRgbByIdx(c % 3);
+          const baseY = height * (0.28 + c * 0.11);
+          const ribbonH = height * (0.24 + bass * 0.14 + (c % 2) * 0.05);
+          for (let x = 0; x <= width; x += stepX) {
+            const wave =
+              Math.sin(x * 0.0042 + tSec * (0.45 + c * 0.14) + c * 1.7) * 42 +
+              Math.cos(x * 0.009 - tSec * 0.32 + c) * 20;
+            const yBot = baseY + wave;
+            const yTop = yBot - ribbonH * (0.7 + 0.3 * Math.sin(x * 0.006 + tSec * 0.7 + c));
+            const alpha = (0.1 + energy * 0.12) * (0.65 + 0.35 * Math.sin(x * 0.008 - tSec * 0.9 + c * 2));
+
+            const colGrad = ctx.createLinearGradient(x, yBot, x, yTop);
+            colGrad.addColorStop(0, `rgba(${rgb}, 0)`);
+            colGrad.addColorStop(0.22, `rgba(${rgb}, ${alpha.toFixed(3)})`);
+            colGrad.addColorStop(0.65, `rgba(${c % 2 === 0 ? c2 : c3}, ${(alpha * 0.55).toFixed(3)})`);
+            colGrad.addColorStop(1, `rgba(${rgb}, 0)`);
+            ctx.fillStyle = colGrad;
+            ctx.fillRect(x, yTop, stepX + 1, yBot - yTop);
+          }
+        }
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 11. BIOLUMINESCENT (Glowing Jellyfish Pulses & Luminous Spores)
+      // ================================================================
+      else if (mode === 'bioluminescent') {
+        // Floating glowing spores
+        for (let i = 0; i < plankton.length; i++) {
+          const p = plankton[i];
+          p.x += (p.vx + Math.sin(tSec * 0.8 + p.phase) * 0.3) * step;
+          p.y += p.vy * (1 + bass * 0.9) * step;
+          if (p.y < -15) {
+            p.y = height + 15;
+            p.x = Math.random() * width;
+          }
+          if (p.x < -15) p.x = width + 15;
+          if (p.x > width + 15) p.x = -15;
+
+          const rgb = getRgbByIdx(p.rgbIdx);
+          const pulse = 0.45 + 0.55 * Math.sin(tSec * 2.1 + p.phase);
+          const r = p.r * (2.6 + bass * 2.0);
+          const g = ctx.createRadialGradient(p.x, p.y, 0.2, p.x, p.y, r);
+          g.addColorStop(0, `rgba(255, 255, 255, ${(pulse * 0.8).toFixed(3)})`);
+          g.addColorStop(0.35, `rgba(${rgb}, ${(pulse * 0.65).toFixed(3)})`);
+          g.addColorStop(1, `rgba(${rgb}, 0)`);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Translucent pulsing jellyfish bells & trails
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < jellies.length; i++) {
+          const j = jellies[i];
+          const swimPulse = Math.sin(tSec * 1.45 + j.phase);
+          j.y -= (j.vy + Math.max(0, swimPulse) * 0.38) * (1 + bass * 0.8) * step;
+          j.x += Math.sin(tSec * 0.45 + j.phase) * 0.28 * step;
+          if (j.y < -j.r * 4) {
+            j.y = height + j.r * 3;
+            j.x = width * (0.1 + Math.random() * 0.8);
+          }
+
+          const rgb = getRgbByIdx(j.rgbIdx);
+          const rx = j.r * (1 + swimPulse * 0.12 + bass * 0.12);
+          const ry = j.r * (0.72 - swimPulse * 0.08);
+
+          // Luminous aura around bell
+          const aura = ctx.createRadialGradient(j.x, j.y, rx * 0.15, j.x, j.y, rx * 2.3);
+          aura.addColorStop(0, `rgba(${rgb}, ${(0.42 + bass * 0.25).toFixed(3)})`);
+          aura.addColorStop(0.55, `rgba(${rgb}, ${(0.14 + mids * 0.1).toFixed(3)})`);
+          aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = aura;
+          ctx.beginPath();
+          ctx.arc(j.x, j.y, rx * 2.3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Dome bell
+          ctx.fillStyle = `rgba(${rgb}, ${(0.34 + bass * 0.18).toFixed(3)})`;
+          ctx.strokeStyle = `rgba(255, 255, 255, ${(0.45 + bass * 0.25).toFixed(3)})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.ellipse(j.x, j.y, rx, ry, 0, Math.PI, Math.PI * 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Flowing glowing tentacles
+          ctx.strokeStyle = `rgba(${rgb}, ${(0.35 + mids * 0.22).toFixed(3)})`;
+          ctx.lineWidth = 1;
+          for (let t = -2; t <= 2; t++) {
+            const tx = j.x + (t / 2.6) * rx;
+            ctx.beginPath();
+            ctx.moveTo(tx, j.y);
+            ctx.quadraticCurveTo(
+              tx + Math.sin(tSec * 2 + j.phase + t) * 10,
+              j.y + j.r * 1.35,
+              tx + Math.cos(tSec * 1.5 + j.phase + t) * 14,
+              j.y + j.r * 2.6
+            );
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      // ================================================================
+      // 12. SNOWFALL (Multi-Depth Drifting Winter Flakes + Frost Glow)
+      // ================================================================
+      else if (mode === 'snowfall') {
+        const frostGlow = ctx.createRadialGradient(
+          width * 0.5,
+          0,
+          20,
+          width * 0.5,
+          height * 0.15,
+          Math.max(width, height) * 0.65
+        );
+        frostGlow.addColorStop(0, `rgba(${c1}, ${(0.16 + mids * 0.12).toFixed(3)})`);
+        frostGlow.addColorStop(0.5, `rgba(${c2}, ${(0.08 + bass * 0.06).toFixed(3)})`);
+        frostGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = frostGlow;
+        ctx.fillRect(0, 0, width, height);
+
+        const wind = (0.35 + mids * 0.85) * Math.sin(tSec * 0.28);
+        for (let i = 0; i < snowflakes.length; i++) {
+          const sf = snowflakes[i];
+          sf.y += sf.vy * (1 + energy * 0.55) * step;
+          sf.x += (sf.vx + wind + Math.sin(tSec * sf.swayFreq + sf.phase) * sf.swayAmp) * step;
+          if (sf.y > height + 16) {
+            sf.y = -12;
+            sf.x = Math.random() * width;
+          }
+          if (sf.x > width + 16) sf.x = -12;
+          if (sf.x < -16) sf.x = width + 12;
+
+          if (sf.soft) {
+            const g = ctx.createRadialGradient(sf.x, sf.y, 0.2, sf.x, sf.y, sf.r * 1.4);
+            g.addColorStop(0, `rgba(245, 250, 255, ${(sf.alpha * 0.9).toFixed(3)})`);
+            g.addColorStop(0.55, `rgba(${c2}, ${(sf.alpha * 0.35).toFixed(3)})`);
+            g.addColorStop(1, 'rgba(245, 250, 255, 0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(sf.x, sf.y, sf.r * 1.4, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillStyle = `rgba(245, 250, 255, ${(sf.alpha + bass * 0.1).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(sf.x, sf.y, sf.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      // ================================================================
+      // 13. BLACKHOLE (Event Horizon, Photon Ring & Accretion Disk)
+      // ================================================================
+      else if (mode === 'blackhole') {
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          const tw = 0.5 + 0.5 * Math.sin(tSec * s.twinkleSpeed + s.phase);
+          ctx.fillStyle = `rgba(240, 246, 255, ${(s.baseAlpha * tw * 0.78).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const cx = width * 0.5;
+        const cy = height * 0.48;
+        const bhR = Math.min(width, height) * 0.135;
+
+        // Gravitational lensing halo
+        const lens = ctx.createRadialGradient(cx, cy, bhR * 0.85, cx, cy, bhR * (3.1 + bass * 0.7));
+        lens.addColorStop(0, `rgba(255, 255, 255, ${(0.35 + bass * 0.2).toFixed(3)})`);
+        lens.addColorStop(0.22, `rgba(${c1}, ${(0.36 + bass * 0.22).toFixed(3)})`);
+        lens.addColorStop(0.55, `rgba(${c2}, ${(0.14 + mids * 0.1).toFixed(3)})`);
+        lens.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = lens;
+        ctx.beginPath();
+        ctx.arc(cx, cy, bhR * (3.1 + bass * 0.7), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Update & draw back half of orbiting accretion disk
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < orbitParticles.length; i++) {
+          const op = orbitParticles[i];
+          op.angle += op.angularVel * (1 + bass * 1.15) * step;
+          if (Math.sin(op.angle) >= 0) continue; // front half drawn after event horizon
+          const px = cx + Math.cos(op.angle) * op.radius;
+          const py = cy + Math.sin(op.angle) * op.radius * op.tilt;
+          const rgb = getRgbByIdx(op.rgbIdx);
+          ctx.fillStyle = `rgba(${rgb}, ${(op.alpha * 0.72).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(px, py, op.size * (1 + bass * 0.35), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Glowing warped photon ring around the event horizon
+        ctx.strokeStyle = `rgba(${c1}, ${(0.72 + bass * 0.25).toFixed(3)})`;
+        ctx.lineWidth = 3.2 + bass * 2.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, bhR * 1.04, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(255, 248, 235, ${(0.85 + bass * 0.15).toFixed(3)})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, bhR * 1.01, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Pitch-black singularity event horizon
+        ctx.fillStyle = '#020204';
+        ctx.beginPath();
+        ctx.arc(cx, cy, bhR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Front half of orbiting accretion disk sweeping across the event horizon
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < orbitParticles.length; i++) {
+          const op = orbitParticles[i];
+          if (Math.sin(op.angle) < 0) continue;
+          const px = cx + Math.cos(op.angle) * op.radius;
+          const py = cy + Math.sin(op.angle) * op.radius * op.tilt;
+          const rgb = getRgbByIdx(op.rgbIdx);
+          const pr = op.size * (1.15 + bass * 0.45);
+          const pg = ctx.createRadialGradient(px, py, 0.2, px, py, pr * 2.6);
+          pg.addColorStop(0, `rgba(255, 255, 255, ${(op.alpha * 0.9).toFixed(3)})`);
+          pg.addColorStop(0.4, `rgba(${rgb}, ${(op.alpha * 0.78).toFixed(3)})`);
+          pg.addColorStop(1, `rgba(${rgb}, 0)`);
+          ctx.fillStyle = pg;
+          ctx.beginPath();
+          ctx.arc(px, py, pr * 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
       }
 
       prevBass = bass;

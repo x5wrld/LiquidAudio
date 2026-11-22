@@ -2431,6 +2431,23 @@ export const App: React.FC = () => {
     };
   }, [listeningStats, compareStats]);
 
+  const THEME_OPTIONS: { id: UiStyleMode; label: string; desc: string }[] = [
+    { id: 'liquid', label: 'Liquid Glass (Default)', desc: 'Frosted glass & 3D album color mesh' },
+    { id: 'space', label: 'Meteor Shower / Space', desc: 'Twinkling stars & glowing audio meteors' },
+    { id: 'thunder', label: 'Thunder & Lightning', desc: 'Top storm clouds & beat-synced bolts' },
+    { id: 'undersea', label: 'Water / Undersea', desc: 'Caustic sunbeams, bubbles & plankton' },
+    { id: 'lava', label: 'Lava Lamp', desc: 'Floating molten wax blobs in song colors' },
+    { id: 'nature', label: 'Nature', desc: 'Forest canopy, fireflies & drifting leaves' },
+    { id: 'rain', label: 'Rain on Glass', desc: 'Window droplets, wet trails & soft bokeh' },
+    { id: 'synthwave', label: 'Synthwave', desc: 'Retro segmented sun & scrolling neon grid' },
+    { id: 'eclipse', label: 'Solar Eclipse', desc: 'Dark lunar disc with blazing solar corona' },
+    { id: 'nebula', label: 'Nebula', desc: 'Swirling deep-space cosmic gas & star clusters' },
+    { id: 'aurora', label: 'Aurora Borealis', desc: 'Flowing Northern Lights curtains in the night sky' },
+    { id: 'bioluminescent', label: 'Bioluminescent', desc: 'Glowing deep-sea jellyfish & luminous spores' },
+    { id: 'snowfall', label: 'Snowfall', desc: 'Multi-depth drifting snowflakes & frost glow' },
+    { id: 'blackhole', label: 'Blackhole', desc: 'Event horizon, photon ring & accretion disk' },
+  ];
+
   const isDark = true;
   const isAnimatedCanvasTheme = uiStyle !== 'liquid';
   const glassClassMap: Record<UiStyleMode, string> = {
@@ -2440,6 +2457,14 @@ export const App: React.FC = () => {
     undersea: 'undersea-surface-dark text-white',
     lava: 'lava-surface-dark text-white',
     nature: 'nature-surface-dark text-white',
+    rain: 'thunder-surface-dark text-white',
+    synthwave: 'lava-surface-dark text-white',
+    eclipse: 'space-surface-dark text-white',
+    nebula: 'space-surface-dark text-white',
+    aurora: 'undersea-surface-dark text-white',
+    bioluminescent: 'undersea-surface-dark text-white',
+    snowfall: 'thunder-surface-dark text-white',
+    blackhole: 'space-surface-dark text-white',
   };
   const bgClassMap: Record<UiStyleMode, string> = {
     liquid: 'liquid-bg-dark text-white',
@@ -2448,6 +2473,14 @@ export const App: React.FC = () => {
     undersea: 'undersea-bg-dark text-white',
     lava: 'lava-bg-dark text-white',
     nature: 'nature-bg-dark text-white',
+    rain: 'thunder-bg-dark text-white',
+    synthwave: 'lava-bg-dark text-white',
+    eclipse: 'space-bg-dark text-white',
+    nebula: 'space-bg-dark text-white',
+    aurora: 'space-bg-dark text-white',
+    bioluminescent: 'undersea-bg-dark text-white',
+    snowfall: 'thunder-bg-dark text-white',
+    blackhole: 'space-bg-dark text-white',
   };
   const glassClass = glassClassMap[uiStyle] || 'glass-surface-dark text-white';
   const bgClass = bgClassMap[uiStyle] || 'liquid-bg-dark text-white';
@@ -2457,24 +2490,44 @@ export const App: React.FC = () => {
   const isCoverBright = palette.brightnessMode === 'bright';
 
   const dynamicBgStyle: React.CSSProperties = useMemo(() => {
-    if (uiStyle === 'space') {
+    if (uiStyle === 'space' || uiStyle === 'eclipse' || uiStyle === 'blackhole') {
       return {
         background: `radial-gradient(ellipse at 50% 0%, #090d1b 0%, #05070e 58%, #020307 100%)`,
       };
     }
-    if (uiStyle === 'thunder') {
+    if (uiStyle === 'thunder' || uiStyle === 'rain') {
       return {
-        background: `linear-gradient(180deg, #0b0e18 0%, #070a13 52%, #04050a 100%)`,
+        background: `linear-gradient(180deg, #0b0f1b 0%, #070a13 52%, #04050a 100%)`,
       };
     }
-    if (uiStyle === 'undersea') {
+    if (uiStyle === 'undersea' || uiStyle === 'bioluminescent') {
       return {
-        background: `radial-gradient(ellipse at 50% 0%, rgba(${palette.primaryRgb}, 0.16) 0%, #041b2e 38%, #031120 72%, #020810 100%)`,
+        background: `radial-gradient(ellipse at 50% 0%, rgba(${palette.primaryRgb}, 0.14) 0%, #031526 38%, #020d1a 72%, #01060d 100%)`,
       };
     }
     if (uiStyle === 'lava') {
       return {
         background: `radial-gradient(ellipse at 50% 100%, rgba(${palette.primaryRgb}, 0.18) 0%, #100914 48%, #060409 100%)`,
+      };
+    }
+    if (uiStyle === 'synthwave') {
+      return {
+        background: `linear-gradient(180deg, #0b0618 0%, #16092a 48%, #080410 100%)`,
+      };
+    }
+    if (uiStyle === 'nebula') {
+      return {
+        background: `radial-gradient(ellipse at 50% 50%, #0a0918 0%, #05050d 62%, #020206 100%)`,
+      };
+    }
+    if (uiStyle === 'aurora') {
+      return {
+        background: `linear-gradient(180deg, #040c18 0%, #05111c 52%, #02060b 100%)`,
+      };
+    }
+    if (uiStyle === 'snowfall') {
+      return {
+        background: `linear-gradient(180deg, #0b1322 0%, #070d18 55%, #04070e 100%)`,
       };
     }
     if (uiStyle === 'nature') {
@@ -6023,7 +6076,7 @@ export const App: React.FC = () => {
               {/* Sub-navigation tabs ONLY when inside Library (ordered: Offline, Liked, Your Playlists, Saved Artists, All Songs) */}
               {activeView === 'library' && (
                 <div className="pb-2.5 border-b border-white/10">
-                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-black/25 p-1 liquid-tab-capsule">
+                  <div className="flex flex-wrap items-center gap-1 bg-black/25 p-1.5 rounded-2xl border border-white/10">
                     {[
                       {
                         id: 'offline',
@@ -8349,56 +8402,21 @@ export const App: React.FC = () => {
                   </label>
                   <span className="text-[10px] opacity-60">Saved permanently</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      {
-                        id: 'liquid',
-                        label: 'Liquid Glass (Default)',
-                        desc: 'Frosted glass & 3D album color mesh',
-                      },
-                      {
-                        id: 'space',
-                        label: 'Meteor Shower / Space',
-                        desc: 'Twinkling stars & glowing audio meteors',
-                      },
-                      {
-                        id: 'thunder',
-                        label: 'Thunder & Lightning',
-                        desc: 'Top storm clouds & beat-synced bolts',
-                      },
-                      {
-                        id: 'undersea',
-                        label: 'Water / Undersea',
-                        desc: 'Caustic sunbeams, bubbles & plankton',
-                      },
-                      {
-                        id: 'lava',
-                        label: 'Lava Lamp',
-                        desc: 'Floating molten wax blobs in song colors',
-                      },
-                      {
-                        id: 'nature',
-                        label: 'Nature',
-                        desc: 'Forest canopy, fireflies & drifting leaves',
-                      },
-                    ] as { id: UiStyleMode; label: string; desc: string }[]
-                  ).map((st) => (
-                    <button
-                      key={st.id}
-                      type="button"
-                      onClick={() => setUiStyle(st.id)}
-                      style={uiStyle === st.id ? dynamicAccentStyle : undefined}
-                      className={`p-2.5 rounded-xl text-left transition border ${
-                        uiStyle === st.id
-                          ? 'border-white/30'
-                          : 'bg-white/5 border-white/10 opacity-75 hover:opacity-100'
-                      }`}
-                    >
-                      <p className="text-xs font-bold">{st.label}</p>
-                      <p className="text-[10px] opacity-75 mt-0.5">{st.desc}</p>
-                    </button>
-                  ))}
+                <div className="space-y-1.5">
+                  <select
+                    value={uiStyle}
+                    onChange={(e) => setUiStyle(e.target.value as UiStyleMode)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-black/45 border border-white/20 text-xs font-semibold text-white focus:outline-none focus:border-white/40 cursor-pointer"
+                  >
+                    {THEME_OPTIONS.map((st) => (
+                      <option key={st.id} value={st.id} className="bg-[#0e1018] text-white">
+                        {st.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] opacity-70 px-1">
+                    {THEME_OPTIONS.find((t) => t.id === uiStyle)?.desc}
+                  </p>
                 </div>
               </div>
 
@@ -9482,31 +9500,21 @@ export const App: React.FC = () => {
                   <label className="block text-[11px] uppercase opacity-70">
                     Theme Style
                   </label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {(
-                      [
-                        { id: 'liquid', label: 'Liquid (Default)' },
-                        { id: 'space', label: 'Meteor Shower' },
-                        { id: 'thunder', label: 'Thunder & Lightning' },
-                        { id: 'undersea', label: 'Water / Undersea' },
-                        { id: 'lava', label: 'Lava Lamp' },
-                        { id: 'nature', label: 'Nature' },
-                      ] as { id: UiStyleMode; label: string }[]
-                    ).map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setUiStyle(t.id)}
-                        style={uiStyle === t.id ? dynamicAccentStyle : undefined}
-                        className={`py-2 px-2.5 rounded-xl text-xs font-semibold transition border truncate ${
-                          uiStyle === t.id
-                            ? 'border-white/30'
-                            : 'bg-black/25 border-white/10 opacity-75 hover:opacity-100'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
+                  <div className="space-y-1">
+                    <select
+                      value={uiStyle}
+                      onChange={(e) => setUiStyle(e.target.value as UiStyleMode)}
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/20 text-xs font-semibold text-white focus:outline-none focus:border-white/40 cursor-pointer"
+                    >
+                      {THEME_OPTIONS.map((t) => (
+                        <option key={t.id} value={t.id} className="bg-[#0e1018] text-white">
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] opacity-65 px-1">
+                      {THEME_OPTIONS.find((t) => t.id === uiStyle)?.desc}
+                    </p>
                   </div>
 
                   {/* Quick Visualizer Speed & Static Color Controls inside Settings */}

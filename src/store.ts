@@ -540,7 +540,21 @@ const initialIndex =
       )
     : -1;
 
-export type UiStyleMode = 'liquid' | 'space' | 'thunder' | 'undersea' | 'lava' | 'nature';
+export type UiStyleMode =
+  | 'liquid'
+  | 'space'
+  | 'thunder'
+  | 'undersea'
+  | 'lava'
+  | 'nature'
+  | 'rain'
+  | 'synthwave'
+  | 'eclipse'
+  | 'nebula'
+  | 'aurora'
+  | 'bioluminescent'
+  | 'snowfall'
+  | 'blackhole';
 
 interface PlayerState {
   // Theme & UI
@@ -775,7 +789,22 @@ export function reorderArrayWithGroup<T>(
   return { nextItems, newIndices };
 }
 
-const VALID_UI_STYLES: UiStyleMode[] = ['liquid', 'space', 'thunder', 'undersea', 'lava', 'nature'];
+const VALID_UI_STYLES: UiStyleMode[] = [
+  'liquid',
+  'space',
+  'thunder',
+  'undersea',
+  'lava',
+  'nature',
+  'rain',
+  'synthwave',
+  'eclipse',
+  'nebula',
+  'aurora',
+  'bioluminescent',
+  'snowfall',
+  'blackhole',
+];
 const initialTheme: 'dark' | 'light' = 'dark';
 const initialUiStyle: UiStyleMode =
   initialFx?.uiStyle && VALID_UI_STYLES.includes(initialFx.uiStyle as UiStyleMode)
